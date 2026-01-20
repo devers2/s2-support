@@ -1,0 +1,204 @@
+/**
+ * S2 Support Library
+ *
+ * Copyright 2020 - 2026 devers2 (이승수, Daejeon, Korea)
+ * Contact: eseungsu.dev@gmail.com
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * For more information, please see the LICENSE file in the root directory.
+ */
+package io.github.devers2.s2util.file.impl;
+
+import java.io.IOException;
+import java.time.Duration;
+
+import org.apache.commons.pool2.BasePooledObjectFactory;
+import org.apache.commons.pool2.PooledObject;
+import org.apache.commons.pool2.impl.AbandonedConfig;
+import org.apache.commons.pool2.impl.DefaultPooledObject;
+import org.apache.commons.pool2.impl.GenericObjectPool;
+import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.integration.sftp.session.DefaultSftpSessionFactory;
+import org.springframework.integration.sftp.session.SftpSession;
+
+@Configuration
+public class SpringSftpConfig {
+    private static final Logger logger = LoggerFactory.getLogger(SpringSftpConfig.class);
+
+    /* 유휴 객체 정비 주기 (초) */
+    private static final int EVICTION_RUN_INTERVAL_SECONDS = 60;
+    /* 사용하지 않은 유휴 세션의 최대 보관 시간 (분) */
+    private static final int MIN_EVICTABLE_IDLE_MINUTES = 30;
+    /* 세션 대여 대기 시간 (초) */
+    private static final int MAX_WAIT_FOR_BORROW_SECONDS = 10;
+    /* 반납되지 않은(대여 상태로 방치된) 세션 강제 회수 시간 (분) */
+    private static final int ABANDONED_TIMEOUT_MINUTES = 35;
+
+    @Value("${sftp.host}")
+    private String sftpHost;
+
+    @Value("${sftp.port}")
+    private int sftpPort;
+
+    @Value("${sftp.user}")
+    private String sftpUser;
+
+    @Value("${sftp.password:#{null}}")
+    private String sftpPassword;
+
+    @Value("${sftp.private-key-path}")
+    private String privateKeyPath;
+
+    @Value("${sftp.private-key-passphrase}")
+    private String privateKeyPassphrase;
+
+    @Value("${sftp.pool.max-total:128}")
+    private int maxTotal;
+
+    @Value("${sftp.pool.max-idle:32}")
+    private int maxIdle;
+
+    @Value("${sftp.pool.min-idle:8}")
+    private int minIdle;
+
+    @Bean
+    public DefaultSftpSessionFactory sftpSessionFactory() throws IOException {
+        // ssh 키 생성시에는 PEM 형식으로 할 것 !!!!!
+        // ssh-keygen -p -m PEM -f /Users/eseun/.ssh/sftp_key
+        DefaultSftpSessionFactory factory = new DefaultSftpSessionFactory(true);
+        factory.setHost(sftpHost);
+        factory.setPort(sftpPort);
+        factory.setUser(sftpUser);
+        // factory.setPassword(sftpPassword); // 개인키 설정으로 사용할때는 개인키 확인을 위해 주석처리
+        factory.setAllowUnknownKeys(true);
+
+        // 개인키 설정
+        factory.setPrivateKey(new FileSystemResource(privateKeyPath));
+        // 개인키 암호 설정 (암호가 있는 경우)
+        factory.setPrivateKeyPassphrase(privateKeyPassphrase);
+        return factory;
+    }
+
+    @Bean
+    public GenericObjectPool<SftpSession> sftpSessionPool(DefaultSftpSessionFactory sessionFactory) {
+        GenericObjectPoolConfig<SftpSession> config = new GenericObjectPoolConfig<>();
+        config.setMaxTotal(maxTotal);
+        config.setMaxIdle(maxIdle);
+        config.setMinIdle(minIdle);
+        // 검증 설정
+        config.setTestOnBorrow(true);
+        config.setTestOnReturn(false);
+        config.setTestWhileIdle(true);
+        // 고갈 시 대기 설정
+        config.setBlockWhenExhausted(true);
+        applyMaxWait(config, Duration.ofSeconds(MAX_WAIT_FOR_BORROW_SECONDS));
+        // 에빅션 설정 (30분 이상 유휴 세션 제거, 60초 주기 검사) - Duration API 우선, 미지원 시 millis로 대체
+        applyEvictionConfig(config, Duration.ofSeconds(EVICTION_RUN_INTERVAL_SECONDS), Duration.ofMinutes(MIN_EVICTABLE_IDLE_MINUTES));
+        // JMX 비활성화
+        config.setJmxEnabled(false);
+
+        GenericObjectPool<SftpSession> pool = new GenericObjectPool<>(new BasePooledObjectFactory<SftpSession>() {
+            @Override
+            public SftpSession create() {
+                return sessionFactory.getSession();
+            }
+
+            @Override
+            public PooledObject<SftpSession> wrap(SftpSession session) {
+                return new DefaultPooledObject<>(session);
+            }
+
+            @Override
+            public boolean validateObject(PooledObject<SftpSession> p) {
+                try {
+                    SftpSession s = p.getObject();
+                    return s != null && s.isOpen();
+                } catch (RuntimeException e) {
+                    return false;
+                }
+            }
+
+            @Override
+            public void destroyObject(PooledObject<SftpSession> p) {
+                try {
+                    SftpSession s = p.getObject();
+                    if (s != null) {
+                        s.close();
+                    }
+                } catch (RuntimeException ignore) {
+                    logger.debug("Ignored runtime exception while closing SFTP session", ignore);
+                }
+            }
+        }, config);
+
+        // Abandoned(반환 누락) 세션 자동 회수 설정
+        AbandonedConfig abandoned = new AbandonedConfig();
+        abandoned.setRemoveAbandonedOnBorrow(true);
+        abandoned.setRemoveAbandonedOnMaintenance(true);
+        applyAbandonedTimeout(abandoned, Duration.ofMinutes(ABANDONED_TIMEOUT_MINUTES));
+        abandoned.setLogAbandoned(true);
+        pool.setAbandonedConfig(abandoned);
+
+        return pool;
+    }
+
+    private static <T> void applyEvictionConfig(GenericObjectPoolConfig<T> config, Duration interval, Duration minIdle) {
+        try {
+            // commons-pool2 2.12+ 에서 지원되는 Duration 기반 API
+            config.getClass().getMethod("setTimeBetweenEvictionRuns", Duration.class).invoke(config, interval);
+            config.getClass().getMethod("setMinEvictableIdleTime", Duration.class).invoke(config, minIdle);
+        } catch (ReflectiveOperationException | IllegalArgumentException e) {
+            // 구버전 호환: millis 기반 API로 대체
+            try {
+                config.getClass().getMethod("setTimeBetweenEvictionRunsMillis", long.class)
+                        .invoke(config, interval.toMillis());
+                config.getClass().getMethod("setMinEvictableIdleTimeMillis", long.class)
+                        .invoke(config, minIdle.toMillis());
+            } catch (ReflectiveOperationException | IllegalArgumentException ignore) {
+                logger.warn("Eviction config methods not available; using library defaults");
+            }
+        }
+    }
+
+    private static <T> void applyMaxWait(GenericObjectPoolConfig<T> config, Duration maxWait) {
+        try {
+            config.getClass().getMethod("setMaxWait", Duration.class).invoke(config, maxWait);
+        } catch (ReflectiveOperationException | IllegalArgumentException e) {
+            try {
+                config.getClass().getMethod("setMaxWaitMillis", long.class).invoke(config, maxWait.toMillis());
+            } catch (ReflectiveOperationException | IllegalArgumentException ignore) {
+                logger.warn("MaxWait config methods not available; using library defaults");
+            }
+        }
+    }
+
+    private static void applyAbandonedTimeout(AbandonedConfig abandoned, Duration timeout) {
+        try {
+            abandoned.getClass().getMethod("setRemoveAbandonedTimeout", Duration.class).invoke(abandoned, timeout);
+        } catch (ReflectiveOperationException | IllegalArgumentException e) {
+            try {
+                int seconds = (int) Math.min(Integer.MAX_VALUE, Math.max(0, timeout.getSeconds()));
+                abandoned.getClass().getMethod("setRemoveAbandonedTimeout", int.class).invoke(abandoned, seconds);
+            } catch (ReflectiveOperationException | IllegalArgumentException ignore) {
+                logger.warn("Abandoned timeout config methods not available; using library defaults");
+            }
+        }
+    }
+}

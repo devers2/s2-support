@@ -1,0 +1,206 @@
+/**
+ * S2 Support Library
+ *
+ * Copyright 2020 - 2026 devers2 (이승수, Daejeon, Korea)
+ * Contact: eseungsu.dev@gmail.com
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * For more information, please see the LICENSE file in the root directory.
+ */
+
+/* Step 1: HTML 요소에 기본 박스 모델 설정 */
+html {
+  box-sizing: border-box;
+}
+
+/* Step 2: 모든 요소와 가상 요소가 이를 상속받도록 설정 */
+*,
+*::before,
+*::after {
+  box-sizing: inherit;
+}
+
+/* ===================================================================================================
+    Modal
+=================================================================================================== */
+.s2-modal {
+  position: fixed; /* 화면 전체를 덮도록 설정 */
+  z-index: 7700;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto; /* 필요에 따라 스크롤바 표시 */
+  background-color: rgb(0 0 0 / 50%);
+  display: flex; /* Flexbox 사용 */
+  justify-content: center; /* 수평 가운데 정렬 */
+  align-items: center; /* 수직 가운데 정렬 */
+}
+
+.s2-modal > .modal-content {
+  display: flex; /* Flexbox 사용 */
+  flex-direction: column; /* 수직 방향으로 요소 배치 */
+  max-height: 90vh; /* 브라우저 창 높이의 90%로 최대 높이 설정 */
+  background-color: #fff;
+  border-radius: 0.625rem;
+  box-shadow: 0.25rem 0.25rem 0.5rem 0.125rem #0000000f;
+  font-family: Pretendard, sans-serif;
+}
+
+.s2-modal > .modal-content > .modal-header {
+  display: flex;
+  position: relative;
+  padding: 0.625rem;
+  background-color: #1a5df4;
+  border-top-left-radius: 0.625rem;
+  border-top-right-radius: 0.625rem;
+  color: #fff;
+  align-items: center;
+  background-image: url('../images/SEEK_logo.png');
+  background-repeat: no-repeat;
+  background-position: top 1.0625rem left 1.25rem;
+  background-size: 5rem;
+}
+
+.s2-modal > .modal-content > .modal-header > .modal-title {
+  margin: 0.625rem 0 0.625rem 0.625rem;
+  padding-left: 5.625rem;
+  font-size: 1.125rem;
+  font-weight: 400;
+  letter-spacing: -0.0625rem;
+}
+
+.s2-modal > .modal-content > .modal-header > .close-button {
+  position: absolute;
+  width: 1.875rem;
+  height: 1.875rem;
+  right: 0.9375rem;
+  font-size: 1.5625rem;
+  color: #fff;
+  cursor: pointer;
+  border: 0;
+  background-color: transparent;
+}
+
+.s2-modal > .modal-content > .modal-body {
+  padding: 1.25rem; /* body padding 추가 */
+  overflow-y: auto; /* body 부분만 스크롤 가능하도록 설정 */
+  flex-grow: 1; /* body가 남은 공간을 모두 차지하도록 설정 */
+}
+
+/* ===================================================================================================
+    Toast
+=================================================================================================== */
+.s2-toast {
+  position: fixed;
+  top: 1.25rem;
+  right: 1.25rem;
+  width: 18.75rem;
+  background-color: #fff;
+  border-radius: 0.5rem;
+  box-shadow: 0 0.25rem 0.375rem rgb(0 0 0 / 10%);
+  z-index: 7777;
+  overflow: hidden;
+  animation: toast-slide-in 0.5s ease-out;
+  transition: all 0.3s ease;
+}
+
+.s2-toast .flex-sty04 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.625rem 0.9375rem;
+  background-color: #f0f0f0;
+  border-bottom: 0.0625rem solid #e0e0e0;
+}
+
+.s2-toast .flex-sty04 strong {
+  font-size: 0.875rem;
+  color: #333;
+}
+
+.s2-toast .fa-close {
+  color: #888;
+  text-decoration: none;
+  font-size: 1.125rem;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.s2-toast .fa-close:hover {
+  color: #333;
+}
+
+.s2-toast .ma-t15 {
+  padding: 0.9375rem;
+  font-size: 0.875rem;
+  color: #555;
+}
+
+.s2-toast.fade-out {
+  opacity: 0;
+  transform: translateX(1.25rem);
+}
+
+.s2-toast .close-btn {
+  position: relative;
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+}
+
+.s2-toast .close-btn::before,
+.s2-toast .close-btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0.75rem;
+  height: 0.125rem;
+  background: #333;
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.s2-toast .close-btn::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+@keyframes toast-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(1.25rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* ===================================================================================================
+    Common
+=================================================================================================== */
+.s2-c-hidden {
+  /* 해당 요소는 화면에서 완전히 사라지지만 스크린 리더기는 읽을 수 있도록 설정 */
+
+  /* eslint-disable css/no-important */
+  width: 0 !important;
+  height: 0 !important;
+  padding: 0 !important;
+  margin: -0.125rem !important;
+  overflow: hidden !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
