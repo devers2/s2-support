@@ -25,8 +25,10 @@
  * 별도 설정 없이 Gradle이 기본 경로(gradle/libs.versions.toml)를 자동으로 인식하여 'libs' 접근자로 제공
  */
 plugins {
+    id 'java-library'
+    id 'maven-publish'
     alias(libs.plugins.s2.build.support)
-    alias(libs.plugins.license) apply false // ⭐ 'license' 플러그인 (hierynomus) 버전을 카탈로그에서 관리하고, 하위 프로젝트에서 ID로 적용 가능하게 함
+    alias(libs.plugins.license) apply false // ⭐ 'license' 플러그인 (hierynomus) 버전을 카탈로그에서 관리
     id 'signing'
 
     /*
@@ -39,7 +41,7 @@ plugins {
 import io.github.devers2.buildsupport.S2BuildUtils
 
 /*
- * Maven 좌표 설정 (Root)
+ * Maven 좌표 설정
  * - group: 프로젝트의 그룹 ID (예: io.github.devers2, com.example)
  * - version: 프로젝트 버전
  *
@@ -47,7 +49,7 @@ import io.github.devers2.buildsupport.S2BuildUtils
  *   예시) 원본: io.github.devers2, 포크: com.company
  *   이렇게 하면 의존성 관리 도구가 서로 다른 아티팩트로 인식하여 같은 리포지토리라도 별도 아티팩트로 취급된다.
  */
-group = 'io.github.devers2'
+group = 'io.github.devers2.internal'
 version = '1.0.0'
 
 // 전역 변수 선언
@@ -84,34 +86,67 @@ ext {
      * [추가 소스 목록]
      * dynamicSourceInfoMap에 정의된 기능 키(예: 'S2PdfUtil')를 추가하여 관련된 소스 파일 및 라이브러리 의존성을 빌드에 자동으로 포함시킬 수 있다.
      */
-    activeFeatures = [] as Set
+    activeFeatures = ['licensesInfo'] as Set
 
     /**
      * [동적 기능 소스 정보 (Feature Toggles)]
      * - 특정 기능(Feature)에 포함될 소스 파일과 라이선스 정보 정의
-     *
-     * 💡 이 설정은 각 서브프로젝트의 build.gradle 에서 모듈별로 관리된다.
-     * [사용 예시 - subproject/build.gradle]
-     * ext {
-     *     activeFeatures = ['S2PdfUtil'] // 활성화할 기능 키
-     *     dynamicSourceInfoMap = [
-     *         'S2PdfUtil': [
-     *             variantId: 'pdf',
-     *             sources: ['io/github/devers2/s2util/support/S2PdfUtil.java'],
-     *             dependencies: [
-     *                 [configuration: 'compileOnly', group: 'org.jsoup', name: 'jsoup', version: '1.18.3']
-     *             ],
-     *             licenses: ['README-LGPL-2.1-PDF.md']
-     *         ]
-     *     ]
-     * }
      */
-    dynamicSourceInfoMap = [:]
+    dynamicSourceInfoMap = [
+        'licensesInfo': [
+            licenses: [
+                'licenses/LICENSE-APACHE-2.0',
+                'licenses/LICENSE-EPL-2.0',
+                'licenses/LICENSE-LGPL-2.1',
+                'licenses/LICENSE-MIT',
+                'licenses/LICENSE-MPL-2.0',
+                'licenses/NOTICE'
+            ]
+        ],
+        'S2PdfUtil': [
+            /*
+             * OpenHTML to PDF (LGPL 2.1) - S2Pdf 관련 의존성으로 LGPL 2.1 라이선스 준수를 위해 compileOnly로 사용(Shadow/Bundle 방지)
+             * 최종 사용자가 의존성을 직접 추가해야 하며 Shadow JAR에서 쉐이딩/번들링 되지 않도록 방지해야 함
+             */
+            variantId: 'pdf',
+            sources: ['io/github/devers2/s2util/support/S2PdfUtil.java'],
+            dependencies: [
+                [ // (jsoup은 MIT이지만 openhtmltopdf와 함께 동작하므로 동일하게 처리)
+                    configuration: 'compileOnly',
+                    group: 'org.jsoup',
+                    name: 'jsoup',
+                    version: '1.18.3'
+                ],
+                [ // LGPL 2.1 라이선스
+                    configuration: 'compileOnly',
+                    group: 'io.github.openhtmltopdf',
+                    name: 'openhtmltopdf-core',
+                    version: '1.1.24'
+                ],
+                [ // LGPL 2.1 라이선스
+                    configuration: 'compileOnly',
+                    group: 'io.github.openhtmltopdf',
+                    name: 'openhtmltopdf-pdfbox',
+                    version: '1.1.24'
+                ]
+            ],
+            licenses: ['README-LGPL-2.1-PDF.md']
+        ]
+    ]
 
     /*
      * 기본 제외 소스 목록 (항상 제외되는 파일들)
      */
-    excludedSources = [] as Set
+    excludedSources = [
+        'io/github/devers2/s2util/support/S2RestApiUtil.java.txt',
+        'io/github/devers2/s2util/file/impl/SpringSftpConfig.java.txt',
+        'io/github/devers2/s2util/file/impl/SpringSftpFileManagerImpl.java.txt'
+    ] as Set
+
+    /*
+     * 빌드 완료 후 결과물을 테스트할 클래스 지정 (shadowJar 실행 후 testArtifact 태스크로 수행됨, 여러 개 지정 가능)
+     */
+    artifactTestClassNames = []
 
     /**
      * [기준 Java 버전: Artifact ID 생성 기준]
@@ -191,215 +226,246 @@ project.ext.activeFeatures.each { srcName ->
 
 project.ext.globalArtifactSuffix = artifactSuffix
 
-// 저작권 연도 업데이트 (수정이 필요한 경우에만 파일 IO 발생)
-S2BuildUtils.updateCopyright(project, [
-    'README.md'
-] as String[])
-
 
 // ========================================================================
-// ⭐ [서브 프로젝트 구성] ※ subprojects { ... } 안에서의 project 는 서브 프로젝트를 가리킨다.
+// ⭐ [단일 프로젝트 구성]
 // ========================================================================
-subprojects {
-    apply plugin: 'java-library'
-    apply plugin: 'maven-publish'
-    apply plugin: 'signing'
 
-    // 💡 루트 프로젝트에 shadow 플러그인이 실제로 apply 되어 있을 때만 실행
-    if (rootProject.plugins.hasPlugin("com.github.johnrengelman.shadow")) {
-        // 서브 프로젝트 별 Shadow 플러그인을 적용한다. (루트의 버전 카탈로그에서 확인한 ID 사용).
-        // Gradle 플러그인은 의존성을 번들링하지 않고 선언만 해야하므로 제외
-        if (project.name != 's2-validator-plugin') {
-            apply plugin: rootProject.libs.plugins.shadow.get().pluginId
-        }
-    }
-
-    group = rootProject.group
-    if (version == 'unspecified') {
-        // 서브 프로젝트에 버전이 정의되어 있지 않은 경우 루트 버전을 사용
-        version = rootProject.version
-    }
-
-    base {
-        // archivesName 업데이트 (접미사가 있는 경우만)
-        archivesName = "${project.name}${rootProject.ext.globalArtifactSuffix}"
-    }
-
-    repositories {
-        mavenCentral()
-    }
-
-    sourceSets {
-        main {
-            java {
-                // 서브 프로젝트 디렉터리를 기준으로 'src/main/java'를 정의한다.
-                srcDirs = [rootProject.ext.JAVA_SRC_ROOT]
-            }
-            resources {
-                srcDirs = [rootProject.ext.RESOURCES_SRC_ROOT]
-            }
-        }
-    }
-
-    // 프로젝트 통합 설정
-    S2BuildUtils.configureProject(project)
-
-    // 저작권 연도 업데이트 (수정이 필요한 경우에만 파일 IO 발생)
-    S2BuildUtils.updateCopyright(project, [
-        rootProject.ext.JAVA_SRC_ROOT,
-        'src/main/kotlin',
-        'src/main/python',
-        rootProject.ext.RESOURCES_SRC_ROOT,
-        'src/main/webapp',
-        'README.md',
-        'build.gradle'
-    ] as String[])
-
-    /**
-     * 컴파일러 옵션 설정
-     */
-    tasks.withType(JavaCompile).configureEach {
-        options.encoding = 'UTF-8'
-        // 파라미터명 정상적으로 보이도록 수정
-        options.compilerArgs += ['-parameters']
-        if (options.hasProperty('release')) {
-            /**
-             * --release 옵션의 제약을 해제하고, 구형 방식인 -source 및 -target 설정을 강제로 사용
-             * Java 21로 컴파일 하고 결과물을 Java 17으로 실행할 수 있도록 함
-             */
-            options.release.set(null)
-        }
-    }
-
-    /*
-     * [라이브러리 배포 아티팩트 및 Java 호환성 설정]
-     *
-     * 표준 배포 파일(Artifacts) 생성과 Java 호환성 레벨 정의
-     *
-     * 1. 배포 아티팩트:
-     * - withSourcesJar(): 소스 파일(*-sources.jar) 생성
-     * - withJavadocJar(): Javadoc 문서(*-javadoc.jar) 생성
-     *
-     * 2. IDE 활용:
-     * - 메인 JAR와 함께 sources/javadoc JAR 배포 시 IDE가 자동 감지하여 연결
-     * - assemble 또는 publish 계열 태스크로 생성됨
-     *
-     * 3. 호환성 설정:
-     * - sourceCompatibility: 소스 코드 레벨
-     * - targetCompatibility: 바이트코드(.class) 실행 레벨
-     *
-     * ★★★ 'assemble' 실행 시 모든 주요 아티팩트 생성 ★★★
-     *
-     * ※ Javadoc 작성 시 HTML 태그 주의 (<pre> 같은 실제 태그는 사용 가능)
-     *   - 금지: <, >, &, {, }, @
-     *   - 대체: List<String> → {@code List<String>}
-     */
-    java {
-        withJavadocJar()
-        if (S2BuildUtils.determineSourceJarStatus(project)) {
-            withSourcesJar()
-        }
-
-        /**
-         * [Java Toolchain]
-         * 빌드 실행 환경(JAVA_HOME)과 프로젝트 컴파일 환경을 분리하는 현대적인 방식
-         * 1. 일관성: 팀원 모두가 동일한 JDK 버전으로 빌드하도록 강제
-         * 2. 자동화: 로컬에 해당 JDK가 없으면 설정된 리졸버(Foojay 등)를 통해 자동 다운로드
-         * 3. 유연성: Gradle은 Java 17로 실행하면서, 프로젝트는 Java 21로 컴파일하는 등의 설정이 가능
-         */
-        toolchain {
-            // project.ext.javaVersion (JavaVersion 타입)에서 숫자 버전만 추출하여 설정함
-            languageVersion = JavaLanguageVersion.of(rootProject.ext.javaVersion.majorVersion)
-        }
-
-        // --release 옵션을 제거하여 이 설정들이 컴파일러 인자(-source, -target)로 확실히 전달된다. (Java 17으로 실행할 수 있도록 함)
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-
-    publishing {
-        publications {
-            mavenJava(MavenPublication) {
-                from components.java
-                // 생성될 pom.xml 상세 설정 (Maven Central 필수 요건)
-                pom {
-                    name = project.name
-                    description = 'S2Util Library - A comprehensive utility library for Java'
-                    url = 'https://github.com/devers2/s2-util'
-                    licenses {
-                        license {
-                            name = 'The Apache License, Version 2.0'
-                            url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
-                        }
-                    }
-                    developers {
-                        developer {
-                            id = 'devers2'
-                            name = '이승수'
-                            email = 'eseungsu.dev@gmail.com'
-                            organization = 'devers2'
-                            organizationUrl = 'https://github.com/devers2'
-                        }
-                    }
-                    scm {
-                        connection = 'scm:git:git://github.com/devers2/s2-util.git'
-                        developerConnection = 'scm:git:ssh://github.com/devers2/s2-util.git'
-                        url = 'https://github.com/devers2/s2-util'
-                    }
-                }
-            }
-        }
-        repositories {
-            // GitHub Packages 설정
-            maven {
-                name = 's2-packages'
-                url = uri(rootProject.ext.REPO_BASE_URL)
-                credentials {
-                    username = rootProject.ext.GITHUB_USER
-                    password = rootProject.ext.GITHUB_TOKEN
-                }
-            }
-            // Central Portal 배포 설정
-            maven {
-                name = "CentralPortal"
-                // Central Portal Zip Bundle Upload API (v1)
-                // publishingType → AUTOMATIC : 자동 배포, USER_MANAGED : 사용자 관리 배포 (수동 승인/배포 필요 시)
-                url = "https://central.sonatype.com/api/v1/publisher/upload?publishingType=AUTOMATIC"
-                credentials {
-                    username = project.findProperty("centralUsername")
-                    password = project.findProperty("centralPassword")
-                }
-            }
-        }
-    }
-
-    // GPG 서명 설정: 항상 Signing 플러그인을 적용하되, 배포 관련 태스크 실행 시에만 서명 수행
-    signing {
-        // 배포(Publish) 태스크가 실행될 때만 서명 필수 (그 외 일반 빌드에서는 건너뜀)
-        required {
-             gradle.taskGraph.allTasks.any {
-                 it.name.contains("publish") || it.name.contains("Publish")
-             }
-        }
-        sign publishing.publications.mavenJava
-    }
-
-    test {
-        /**
-         * JUnit 5(Jupiter) 플랫폼 사용 설정.
-         * Gradle은 기본적으로 JUnit 4를 사용하려 하므로, JUnit 5 테스트를 실행하려면 이 설정이 필수이다.
-         */
-        useJUnitPlatform()
-        // JVM 인코딩 설정 (테스트 환경에서 한글 깨짐 방지)
-        jvmArgs "-Dfile.encoding=UTF-8", "-Dsun.jnu.encoding=UTF-8"
-    }
-
-    // 'Tasks → other → copyDependencies' 실행 시 지정 디렉토리로 의존성 복사
-    S2BuildUtils.registerCopyDependenciesTask(project)
+base {
+    // archivesName 업데이트 (접미사가 있는 경우만)
+    archivesName = "${project.name}${project.ext.globalArtifactSuffix}"
 }
 
+repositories {
+    mavenCentral()
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs = [project.ext.JAVA_SRC_ROOT]
+        }
+        resources {
+            srcDirs = [project.ext.RESOURCES_SRC_ROOT]
+        }
+    }
+}
+
+// 프로젝트 통합 설정
+S2BuildUtils.configureProject(project)
+
+// 저작권 연도 업데이트 (수정이 필요한 경우에만 파일 IO 발생)
+S2BuildUtils.updateCopyright(project, [
+    project.ext.JAVA_SRC_ROOT,
+    'src/main/kotlin',
+    'src/main/python',
+    project.ext.RESOURCES_SRC_ROOT,
+    'src/main/webapp',
+    'README.md',
+    'build.gradle'
+] as String[])
+
+/**
+ * 컴파일러 옵션 설정
+ */
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    // 파라미터명 정상적으로 보이도록 수정
+    options.compilerArgs += ['-parameters']
+    if (options.hasProperty('release')) {
+        /**
+         * --release 옵션의 제약을 해제하고, 구형 방식인 -source 및 -target 설정을 강제로 사용
+         * Java 21로 컴파일 하고 결과물을 Java 17으로 실행할 수 있도록 함
+         */
+        options.release.set(null)
+    }
+}
+
+/**
+ * [JAR 패키징 명시적 필터링]
+ * S2BuildUtils를 통해 자동 관리되지만, activeFeatures 설정에 따라
+ * 특정 라이선스 파일이 중복 포함되는 것을 방지하기 위해 명시적으로 exclude 처리한다.
+ */
+tasks.withType(Jar).configureEach {
+    if (!activeFeatures.contains('S2PdfUtil')) {
+        exclude 'README-LGPL-2.1-PDF.md'
+    }
+}
+
+/*
+ * [라이브러리 배포 아티팩트 및 Java 호환성 설정]
+ *
+ * 표준 배포 파일(Artifacts) 생성과 Java 호환성 레벨 정의
+ *
+ * 1. 배포 아티팩트:
+ * - withSourcesJar(): 소스 파일(*-sources.jar) 생성
+ * - withJavadocJar(): Javadoc 문서(*-javadoc.jar) 생성
+ *
+ * 2. IDE 활용:
+ * - 메인 JAR와 함께 sources/javadoc JAR 배포 시 IDE가 자동 감지하여 연결
+ * - assemble 또는 publish 계열 태스크로 생성됨
+ *
+ * 3. 호환성 설정:
+ * - sourceCompatibility: 소스 코드 레벨
+ * - targetCompatibility: 바이트코드(.class) 실행 레벨
+ *
+ * ★★★ 'assemble' 실행 시 모든 주요 아티팩트 생성 ★★★
+ *
+ * ※ Javadoc 작성 시 HTML 태그 주의 (<pre> 같은 실제 태그는 사용 가능)
+ *   - 금지: <, >, &, {, }, @
+ *   - 대체: List<String> → {@code List<String>}
+ */
+java {
+    withJavadocJar()
+    if (S2BuildUtils.determineSourceJarStatus(project)) {
+        withSourcesJar()
+    }
+
+    /**
+     * [Java Toolchain]
+     * 빌드 실행 환경(JAVA_HOME)과 프로젝트 컴파일 환경을 분리하는 현대적인 방식
+     * 1. 일관성: 팀원 모두가 동일한 JDK 버전으로 빌드하도록 강제
+     * 2. 자동화: 로컬에 해당 JDK가 없으면 설정된 리졸버(Foojay 등)를 통해 자동 다운로드
+     * 3. 유연성: Gradle은 Java 17로 실행하면서, 프로젝트는 Java 21로 컴파일하는 등의 설정이 가능
+     */
+    toolchain {
+        // project.ext.javaVersion (JavaVersion 타입)에서 숫자 버전만 추출하여 설정함
+        languageVersion = JavaLanguageVersion.of(project.ext.javaVersion.majorVersion)
+    }
+
+    // --release 옵션을 제거하여 이 설정들이 컴파일러 인자(-source, -target)로 확실히 전달된다. (Java 17으로 실행할 수 있도록 함)
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+            // 생성될 pom.xml 상세 설정 (Maven Central 필수 요건)
+            pom {
+                name = project.name
+                description = 'S2Util Library - A comprehensive utility library for Java'
+                url = 'https://github.com/devers2/s2-util'
+                licenses {
+                    license {
+                        name = 'The Apache License, Version 2.0'
+                        url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                    }
+                }
+                developers {
+                    developer {
+                        id = 'devers2'
+                        name = '이승수'
+                        email = 'eseungsu.dev@gmail.com'
+                        organization = 'devers2'
+                        organizationUrl = 'https://github.com/devers2'
+                    }
+                }
+                scm {
+                    connection = 'scm:git:git://github.com/devers2/s2-util.git'
+                    developerConnection = 'scm:git:ssh://github.com/devers2/s2-util.git'
+                    url = 'https://github.com/devers2/s2-util'
+                }
+            }
+        }
+    }
+    repositories {
+        // GitHub Packages 설정
+        maven {
+            name = 's2-packages'
+            url = uri(project.ext.REPO_BASE_URL)
+            credentials {
+                username = project.ext.GITHUB_USER
+                password = project.ext.GITHUB_TOKEN
+            }
+        }
+        // Central Portal 배포 설정
+        maven {
+            name = "CentralPortal"
+            // Central Portal Zip Bundle Upload API (v1)
+            // publishingType → AUTOMATIC : 자동 배포, USER_MANAGED : 사용자 관리 배포 (수동 승인/배포 필요 시)
+            url = "https://central.sonatype.com/api/v1/publisher/upload?publishingType=AUTOMATIC"
+            credentials {
+                username = project.findProperty("centralUsername")
+                password = project.findProperty("centralPassword")
+            }
+        }
+    }
+}
+
+// GPG 서명 설정: 항상 Signing 플러그인을 적용하되, 배포 관련 태스크 실행 시에만 서명 수행
+signing {
+    // 배포(Publish) 태스크가 실행될 때만 서명 필수 (그 외 일반 빌드에서는 건너뜀)
+    required {
+         gradle.taskGraph.allTasks.any {
+             it.name.contains("publish") || it.name.contains("Publish")
+         }
+    }
+    sign publishing.publications.mavenJava
+}
+
+test {
+    /**
+     * JUnit 5(Jupiter) 플랫폼 사용 설정.
+     * Gradle은 기본적으로 JUnit 4를 사용하려 하므로, JUnit 5 테스트를 실행하려면 이 설정이 필수이다.
+     */
+    useJUnitPlatform()
+    // JVM 인코딩 설정 (테스트 환경에서 한글 깨짐 방지)
+    jvmArgs "-Dfile.encoding=UTF-8", "-Dsun.jnu.encoding=UTF-8"
+}
+
+// 'Tasks → other → copyDependencies' 실행 시 지정 디렉토리로 의존성 복사
+S2BuildUtils.registerCopyDependenciesTask(project)
+
 
 // --------------------------------------------------------------------------------------
-// 루트프로젝트 README 파일 버전 & 의존성 가이드 업데이트
+// README 파일 버전 & 의존성 가이드 업데이트
 // --------------------------------------------------------------------------------------
 S2BuildUtils.updateReadmeWithVersionAndDependencies(project, file('README.md'))
+
+
+// ========================================================================
+// ⭐ [의존성 설정]
+// ========================================================================
+
+dependencies {
+    /**
+     * implementation: 컴파일 및 런타임 시 모두 사용함
+     * - 해당 의존성이 프로젝트의 빌드 결과물(JAR)에 직접적인 영향을 미침
+     * - 이 라이브러리를 사용하는 다른 프로젝트(상위 모듈)에는 의존성이 노출되지 않음 (API 캡슐화)
+     * - 런타임에 반드시 필요한 라이브러리인 경우 이 방식을 사용함
+     */
+    implementation(libs.s2.core)
+    implementation(libs.s2.validator)
+
+    /**
+     * compileOnly: 컴파일 시 사용함
+     * - 런타임 시 사용하지 않는 라이브러리인 경우 이 방식을 사용함
+     * - Shadow JAR 생성 시 포함되지 않음
+     */
+    implementation(libs.jsch) // SFTP
+    implementation(libs.commons.pool2) // Object Pooling
+
+    // LZ4 압축 알고리즘: xxHash 사용을 위해 추가
+    implementation(libs.lz4)
+
+    /*
+     * 표준 UUID 생성 라이브러리 (v1~v7 지원, RFC 9562)
+     * v4: 완전 무작위 (java.util.UUID 호환)
+     * v7: 시간순 정렬 가능 + 난수 (DB 성능/보안 최적)
+     * v1: 시간순 정렬 가능하나 보안(MAC 노출) 취약 미사용 권장
+     */
+    implementation(libs.uuid.creator)
+
+    compileOnly(libs.spring6.context) // Java 17 이상으로 개발하므로 Spring 6 및 Spring Boot 3 계열이 표준
+    compileOnly(libs.jakarta.servlet.api) // Java 17 이상으로 개발하므로 jakarta 가 표준
+    compileOnly(libs.jakarta.servlet.jsp) // Java 17 이상으로 개발하므로 jakarta 가 표준
+    compileOnly(libs.aspectj.weaver)
+
+    /**
+     * testImplementation: 테스트 컴파일 및 런타임 시 모두 사용
+     * - 테스트 코드에서 사용하는 라이브러리인 경우 이 방식을 사용
+     */
+    testImplementation(libs.junit.jupiter)
+}

@@ -8,6 +8,9 @@ license-plugin = "0.16.1"
 java = "21"
 jsr305 = "3.0.2"
 
+# S2Util Libraries
+s2-util = "1.0.0"
+
 # Dependencies
 aspectj = "1.9.25.1"
 caffeine = "3.2.3"
@@ -30,6 +33,10 @@ jakarta-servlet-api = "6.1.0"
 jakarta-servlet-jsp = "4.0.0"
 
 [libraries]
+# S2Util
+s2-core = { group = "io.github.devers2", name = "s2-core", version.ref = "s2-util" }
+s2-validator = { group = "io.github.devers2", name = "s2-validator", version.ref = "s2-util" }
+
 # Common
 aspectj-weaver = { group = "org.aspectj", name = "aspectjweaver", version.ref = "aspectj" }
 caffeine = { group = "com.github.ben-manes.caffeine", name = "caffeine", version.ref = "caffeine" }
