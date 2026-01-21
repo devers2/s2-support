@@ -28,7 +28,7 @@ plugins {
     id 'java-library'
     id 'maven-publish'
     alias(libs.plugins.s2.build.support)
-    alias(libs.plugins.license) apply false // ⭐ 'license' 플러그인 (hierynomus) 버전을 카탈로그에서 관리
+
     id 'signing'
 
     /*
@@ -95,6 +95,8 @@ ext {
     dynamicSourceInfoMap = [
         'licensesInfo': [
             licenses: [
+                'README.md',
+                'LICENSE',
                 'licenses/LICENSE-APACHE-2.0',
                 'licenses/LICENSE-EPL-2.0',
                 'licenses/LICENSE-LGPL-2.1',
