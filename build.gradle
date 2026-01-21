@@ -388,7 +388,7 @@ publishing {
             name = "CentralPortal"
             // Central Portal Zip Bundle Upload API (v1)
             // publishingType → AUTOMATIC : 자동 배포, USER_MANAGED : 사용자 관리 배포 (수동 승인/배포 필요 시)
-            url = "https://central.sonatype.com/api/v1/publisher/upload?publishingType=AUTOMATIC"
+            url = "https://central.sonatype.com/api/v1/publisher/upload?publishingType=USER_MANAGED"
             credentials {
                 username = project.findProperty("centralUsername")
                 password = project.findProperty("centralPassword")
