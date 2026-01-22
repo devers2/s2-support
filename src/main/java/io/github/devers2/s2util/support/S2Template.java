@@ -78,41 +78,62 @@ public class S2Template {
     }
 
     /**
-     * 일반적인 문자열 바인딩을 수행합니다.
-     * 값이 유효(null이 아니고 비어있지 않음)할 때만 prefix와 함께 치환됩니다.
+     * [Value 기반 바인딩] 값이 유효할 때만 'prefix + value' 형태로 치환합니다.
+     * <p>
+     * 실제 데이터 값을 쿼리나 메시지에 직접 포함하고 싶을 때 사용합니다.
+     * </p>
      *
-     * @param key    템플릿 내의 키 ({{=key}} 형태)
-     * @param value  치환될 값
-     * @param prefix 값이 존재할 때 앞에 붙을 접두사
+     * @param key    템플릿 내의 치환 대상 키 (예: "name" -> {{=name}})
+     * @param value  치환될 실제 데이터 값
+     * @param prefix 값이 존재할 때 값 앞에 붙일 접두사 (예: "AND name = ")
      * @return 메서드 체이닝을 위한 현재 인스턴스
      */
-    public S2Template bind(String key, Object value, String prefix) {
-        bindings.put(key, S2Util.isNotEmpty(value) ? prefix + value.toString() : "");
+    public S2Template bindValue(String key, Object value, String prefix) {
+        bindings.put(key, isValid(value) ? prefix + value.toString() : "");
         return this;
     }
 
     /**
-     * 접두사 없이 단순 키-값 바인딩을 수행합니다
+     * [Value 기반 바인딩] 접두사 없이 값 자체만 치환합니다.
      *
-     * @param key   템플릿 내의 키 ({{=key}} 형태)
-     * @param value 치환될 값
+     * @param key   템플릿 내의 치환 대상 키
+     * @param value 치환될 실제 데이터 값
      * @return 메서드 체이닝을 위한 현재 인스턴스
      */
-    public S2Template bind(String key, Object value) {
-        return bind(key, value, "");
+    public S2Template bindValue(String key, Object value) {
+        return bindValue(key, value, "");
     }
 
     /**
-     * 쿼리 전용 IN 절 바인딩을 수행합니다.
-     * 컬렉션 내부의 문자열 요소는 자동으로 홑따옴표('') 처리를 하며, 홑따옴표 이스케이프를 지원합니다.
+     * [Clause 기반 바인딩] 값이 유효할 때만 지정된 쿼리 구절(String) 자체를 치환합니다.
+     * <p>
+     * 주로 JPQL/SQL의 파라미터 바인딩(:name) 문구를 조건부로 삽입할 때 사용합니다.
+     * {@code value}는 존재 여부를 판단하는 트리거 역할만 하며, 실제 치환은 {@code clause} 문자열로 이루어집니다.
+     * </p>
      *
-     * @param key    템플릿 내의 키
-     * @param values 바인딩할 컬렉션 값
-     * @param prefix 값이 존재할 때 앞에 붙을 접두사 (예: "AND id IN ")
+     * @param key    템플릿 내의 치환 대상 키
+     * @param value  유효성을 검사할 기준 값 (null, 빈 문자열 여부 등 판단)
+     * @param clause 값이 유효할 때 주입할 실제 문자열 구절 (예: "AND m.id = :id")
+     * @return 메서드 체이닝을 위한 현재 인스턴스
+     */
+    public S2Template bindClause(String key, Object value, String clause) {
+        bindings.put(key, isValid(value) ? clause : "");
+        return this;
+    }
+
+    /**
+     * [Query IN절 바인딩] 컬렉션 요소를 SQL 'IN' 절 문법에 맞게 포맷팅하여 치환합니다.
+     * <p>
+     * 문자열 요소는 자동으로 홑따옴표('') 처리 및 내부 이스케이프가 적용됩니다.
+     * </p>
+     *
+     * @param key    템플릿 내의 치환 대상 키
+     * @param values 바인딩할 컬렉션 데이터 (v1, v2, v3)
+     * @param prefix 값이 존재할 때 앞에 붙일 접두사 (예: "AND m.id IN ")
      * @return 메서드 체이닝을 위한 현재 인스턴스
      */
     public S2Template bindInQuery(String key, Collection<?> values, String prefix) {
-        if (S2Util.isNotEmpty(values)) {
+        if (isValid(values)) {
             String inClause = values.stream()
                     .map(this::formatQueryValue)
                     .collect(Collectors.joining(", ", "(", ")"));
@@ -124,14 +145,17 @@ public class S2Template {
     }
 
     /**
-     * 값이 유효할 때만 추가적인 바인딩 액션을 수행할 수 있도록 합니다.
+     * [함수형 조건 제어] 값이 유효할 때만 특정 작업(Action)을 수행합니다.
+     * <p>
+     * 바인딩 외에 로그 출력이나 추가적인 상태 변경이 필요할 때 유용합니다.
+     * </p>
      *
-     * @param value  검사할 값
-     * @param action 값이 유효할 때 실행할 Consumer 작업 (S2Template 인스턴스가 전달됨)
+     * @param value  유효성을 검사할 값
+     * @param action 값이 유효할 때 실행할 Consumer (현재 S2Template 인스턴스가 전달됨)
      * @return 메서드 체이닝을 위한 현재 인스턴스
      */
     public S2Template ifPresent(Object value, Consumer<S2Template> action) {
-        if (S2Util.isNotEmpty(value)) {
+        if (isValid(value)) {
             action.accept(this);
         }
         return this;
@@ -139,9 +163,11 @@ public class S2Template {
 
     /**
      * 바인딩된 데이터를 바탕으로 최종 문자열을 생성합니다.
-     * 미치환 패턴 제거, 빈 줄 정리, 앞뒤 공백 제거 등의 디테일 로직이 적용됩니다.
+     * <p>
+     * 미치환된 패턴 제거, 빈 줄 제거, 줄 끝 공백 정리 및 전체 앞뒤 공백 정리 로직이 적용됩니다.
+     * </p>
      *
-     * @return 정리된 최종 결과 문자열
+     * @return 정리된 형태의 최종 결과 문자열
      */
     public String render() {
         String result = template;
@@ -172,6 +198,17 @@ public class S2Template {
             return "'" + s.replace("'", "''") + "'";
         }
         return value.toString();
+    }
+
+    /**
+     * 값의 유효성을 체크합니다.
+     */
+    private boolean isValid(Object value) {
+        if (value == null)
+            return false;
+        if (value instanceof Boolean b)
+            return b;
+        return S2Util.isNotEmpty(value);
     }
 
 }
