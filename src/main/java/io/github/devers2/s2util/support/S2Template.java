@@ -459,12 +459,20 @@ public class S2Template {
      * @return 정리된 형태의 최종 결과 문자열
      */
     public String render() {
-        String result = template;
+        StringBuilder resultBuilder = new StringBuilder(template);
 
         // 1. 등록된 바인딩 치환
         for (Map.Entry<String, String> entry : bindings.entrySet()) {
-            result = result.replace("{{=" + entry.getKey() + "}}", entry.getValue());
+            String target = "{{=" + entry.getKey() + "}}";
+            String replacement = entry.getValue();
+            int index = resultBuilder.indexOf(target);
+            while (index != -1) {
+                resultBuilder.replace(index, index + target.length(), replacement);
+                index = resultBuilder.indexOf(target, index + replacement.length());
+            }
         }
+
+        String result = resultBuilder.toString();
 
         // 2. 미치환된 {{=...}} 패턴 제거 (JS 스타일 호환)
         result = S2StringUtil.replaceAll(result, "\\{\\{=.*?\\}\\}", "");
