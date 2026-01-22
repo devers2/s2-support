@@ -60,10 +60,10 @@ import io.github.devers2.s2util.core.S2Util;
  */
 public class S2Template {
 
-    private final String template;
-    private final Map<String, String> bindings = new HashMap<>();
+    protected final String template;
+    protected final Map<String, String> bindings = new HashMap<>();
 
-    private S2Template(String template) {
+    protected S2Template(String template) {
         this.template = Objects.requireNonNull(template, "Template must not be null");
     }
 

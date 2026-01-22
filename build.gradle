@@ -442,11 +442,6 @@ dependencies {
     implementation(libs.s2.core)
     implementation(libs.s2.validator)
 
-    /**
-     * compileOnly: 컴파일 시 사용함
-     * - 런타임 시 사용하지 않는 라이브러리인 경우 이 방식을 사용함
-     * - Shadow JAR 생성 시 포함되지 않음
-     */
     implementation(libs.jsch) // SFTP
     implementation(libs.commons.pool2) // Object Pooling
 
@@ -461,10 +456,16 @@ dependencies {
      */
     implementation(libs.uuid.creator)
 
+    /**
+     * compileOnly: 컴파일 시 사용함
+     * - 런타임 시 사용하지 않는 라이브러리인 경우 이 방식을 사용함
+     * - Shadow JAR 생성 시 포함되지 않음
+     */
     compileOnly(libs.spring6.context) // Java 17 이상으로 개발하므로 Spring 6 및 Spring Boot 3 계열이 표준
     compileOnly(libs.jakarta.servlet.api) // Java 17 이상으로 개발하므로 jakarta 가 표준
     compileOnly(libs.jakarta.servlet.jsp) // Java 17 이상으로 개발하므로 jakarta 가 표준
     compileOnly(libs.aspectj.weaver)
+    compileOnly(libs.jakarta.persistence.api) // JPQL
 
     /**
      * testImplementation: 테스트 컴파일 및 런타임 시 모두 사용
