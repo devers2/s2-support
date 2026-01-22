@@ -44,9 +44,9 @@ public class S2QueryStringUtil {
      * @param baseString 기존 URL 또는 쿼리 문자열 {@code(예: "test.do", "test.do?wrong", "wrong&x=y")}
      * @param entries    추가할 키-값 쌍 (가변인자, 예: Map.entry("a", "1"), Map.entry("b", "2"))
      * @return 결합된 URL 및 쿼리 문자열
-     * @implNote
+     * @apiNote
      *
-     *           <pre>{@code
+     *          <pre>{@code
      * queryStringFromEntries("", Map.entry("a", "1"), Map.entry("b", "2")) → "a=1&b=2"
      * queryStringFromEntries("test.do", Map.entry("a", "1"), Map.entry("b", "2")) → "test.do?a=1&b=2"
      * queryStringFromEntries("test.do?wrong", Map.entry("a", "1"), Map.entry("b", "2")) → "test.do?wrong=&a=1&b=2"

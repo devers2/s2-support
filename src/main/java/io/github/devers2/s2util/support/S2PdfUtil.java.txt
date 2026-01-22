@@ -107,7 +107,7 @@ public class S2PdfUtil {
      * @param convertCssBackgroundImageTargetSelectors CSS 의 Background Image 변환할때 특정 대상만 변환할 필요가 있을때 대상 셀렉터 (없으면 전체를 대상으로 변경)
      * @return Base64 PDF 문자열
      * @throws IOException IOException
-     * @implNote
+     * @apiNote
      *
      *           <pre>{@code
      * S2Pdf.convertHtmlToPdf(htmlInputStream, "/static/public", "/static/public/css/style.css", "/static/public/font/NanumGothic.ttf", getClass(), ".cover-image-container");
@@ -140,7 +140,7 @@ public class S2PdfUtil {
      * @param convertCssBackgroundImageTargetSelectors CSS 의 Background Image 변환할때 특정 대상만 변환할 필요가 있을때 대상 셀렉터 (없으면 전체를 대상으로 변경)
      * @return Base64 PDF 문자열
      * @throws IOException IOException
-     * @implNote
+     * @apiNote
      *
      *           <pre>{@code
      * S2Pdf.convertHtmlToPdf(htmlContent, "/static/public", "/static/public/css/style.css", "/static/public/font/NanumGothic.ttf", getClass(), ".cover-image-container");

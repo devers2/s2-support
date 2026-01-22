@@ -49,9 +49,9 @@ public class S2CollectionUtil {
      * @param list       (Map 또는 VO 객체의 List)
      * @param conditions 조건(가변인자)
      * @return Index
-     * @implNote
+     * @apiNote
      *
-     *           <pre>{@code
+     *          <pre>{@code
      * int findIdx = S2Util.listFindIndex(list, Map.entry("typeA", "a"), Map.entry("typeB", 3));
      * }</pre>
      */
@@ -92,9 +92,9 @@ public class S2CollectionUtil {
      * @param list       (Map 또는 VO 객체의 List)
      * @param conditions 조건(가변인자)
      * @return 객체 목록
-     * @implNote
+     * @apiNote
      *
-     *           <pre>{@code
+     *          <pre>{@code
      * List<Map < String, Object>> filterList = (List<Map<String, Object>>);
      * S2Util.listFilter(testList, Map.entry("typeA", "a"), Map.entry("typeB", 3));
      * }</pre>
@@ -135,9 +135,9 @@ public class S2CollectionUtil {
      * @param fieldName 정렬기준 필드명(VO) 또는 Key(Map)
      * @param orderBy   정렬순서("DESC", "ASC")
      * @return 정렬된 객체 목록
-     * @implNote
+     * @apiNote
      *
-     *           <pre>{@code
+     *          <pre>{@code
      * S2Util.listSort(testList, "key", "ASC");
      * }</pre>
      */

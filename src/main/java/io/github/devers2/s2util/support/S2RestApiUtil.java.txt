@@ -86,7 +86,7 @@ public class S2RestApiUtil {
      * @param timeout 연결 및 읽기 타임아웃(밀리초 단위). null인 경우 기본값 30,000ms 사용. (선택)
      * @param params  요청에 포함할 매개변수로, 키-값 쌍의 배열. (선택)
      * @return API 호출 결과로 반환된 문자열 응답. 응답이 없거나 오류 발생 시 null을 반환.
-     * @implNote
+     * @apiNote
      *
      *           <pre>{@code
      * String result = S2RestApiUtil.callApi("request.api", HttpMethod.POST, 10000,

@@ -51,7 +51,7 @@ import io.github.devers2.s2util.core.S2Util;
  *         """
  * )
  *         .bind("name_cond", name, "AND m.name = ")
- *         .bindInQuery("age_in", ageList, "AND m.age IN ")
+ *         .bindIn("age_in", ageList, "AND m.age IN (", ")")
  *         .render();
  * }</pre>
  *
@@ -86,11 +86,44 @@ public class S2Template {
      * @param key    템플릿 내의 치환 대상 키 (예: "name" -> {{=name}})
      * @param value  치환될 실제 데이터 값
      * @param prefix 값이 존재할 때 값 앞에 붙일 접두사 (예: "AND name = ")
+     * @param suffix 내용 주입 시 뒤에 붙일 접미사
      * @return 메서드 체이닝을 위한 현재 인스턴스
+     * @apiNote
+     *          사용 예시 및 결과:
+     *
+     *          <pre>{@code
+     * // 값이 있는 경우
+     * .bind("id", 10, "ID(", ")") → "ID(10)"
+     * // 값이 null인 경우
+     * .bind("id", null, "ID(", ")") → ""
+     * }</pre>
      */
-    public S2Template bindValue(String key, Object value, String prefix) {
-        bindings.put(key, isValid(value) ? prefix + value.toString() : "");
-        return this;
+    public S2Template bind(String key, Object value, String prefix, String suffix) {
+        return doBind(key, value, prefix, null);
+    }
+
+    /**
+     * [Value 기반 바인딩] 값이 유효할 때만 'prefix + value' 형태로 치환합니다.
+     * <p>
+     * 실제 데이터 값을 쿼리나 메시지에 직접 포함하고 싶을 때 사용합니다.
+     * </p>
+     *
+     * @param key    템플릿 내의 치환 대상 키 (예: "name" -> {{=name}})
+     * @param value  치환될 실제 데이터 값
+     * @param prefix 값이 존재할 때 값 앞에 붙일 접두사 (예: "AND name = ")
+     * @return 메서드 체이닝을 위한 현재 인스턴스
+     * @apiNote
+     *          사용 예시 및 결과:
+     *
+     *          <pre>{@code
+     * // 값이 있는 경우
+     * .bind("id", 10, "ID:") → "ID:10"
+     * // 값이 null인 경우
+     * .bind("id", null, "ID:") → ""
+     * }</pre>
+     */
+    public S2Template bind(String key, Object value, String prefix) {
+        return doBind(key, value, prefix, null);
     }
 
     /**
@@ -99,45 +132,301 @@ public class S2Template {
      * @param key   템플릿 내의 치환 대상 키
      * @param value 치환될 실제 데이터 값
      * @return 메서드 체이닝을 위한 현재 인스턴스
+     * @apiNote
+     *          사용 예시 및 결과:
+     *
+     *          <pre>{@code
+     * // 값이 있는 경우
+     * .bind("id", 10) → "10"
+     * // 값이 null인 경우
+     * .bind("id", null) → ""
+     * }</pre>
      */
-    public S2Template bindValue(String key, Object value) {
-        return bindValue(key, value, "");
+    public S2Template bind(String key, Object value) {
+        return doBind(key, value, null, null);
     }
 
     /**
-     * [Clause 기반 바인딩] 값이 유효할 때만 지정된 쿼리 구절(String) 자체를 치환합니다.
-     * <p>
-     * 주로 JPQL/SQL의 파라미터 바인딩(:name) 문구를 조건부로 삽입할 때 사용합니다.
-     * {@code value}는 존재 여부를 판단하는 트리거 역할만 하며, 실제 치환은 {@code clause} 문자열로 이루어집니다.
-     * </p>
-     *
-     * @param key    템플릿 내의 치환 대상 키
-     * @param value  유효성을 검사할 기준 값 (null, 빈 문자열 여부 등 판단)
-     * @param clause 값이 유효할 때 주입할 실제 문자열 구절 (예: "AND m.id = :id")
-     * @return 메서드 체이닝을 위한 현재 인스턴스
+     * [Value 기반 바인딩] 값이 유효할 때만 'prefix + value' 형태로 치환합니다.
      */
-    public S2Template bindClause(String key, Object value, String clause) {
-        bindings.put(key, isValid(value) ? clause : "");
+    private S2Template doBind(String key, Object value, String prefix, String suffix) {
+        String p = (prefix != null && !prefix.isBlank()) ? prefix : "";
+        String s = (suffix != null && !suffix.isBlank()) ? suffix : "";
+        bindings.put(key, isValid(value) ? p + value.toString() + s : "");
         return this;
     }
 
     /**
-     * [Query IN절 바인딩] 컬렉션 요소를 SQL 'IN' 절 문법에 맞게 포맷팅하여 치환합니다.
+     * [Condition 기반 바인딩] 조건(condition)이 true일 때 지정된 내용(content)을 주입합니다.
      * <p>
-     * 문자열 요소는 자동으로 홑따옴표('') 처리 및 내부 이스케이프가 적용됩니다.
+     * 이 메서드는 {@code condition}의 논리 조건으로 트리거로 사용합니다.
+     * 유효할 경우, {@code prefix}와 {@code content}를 결합하여 템플릿의 키를 치환합니다.
+     * 주로 동적 쿼리에서 {@code AND}, {@code ORDER BY} 절과 같은 문장 자체를 조건부로 삽입할 때 유용합니다.
      * </p>
      *
-     * @param key    템플릿 내의 치환 대상 키
-     * @param values 바인딩할 컬렉션 데이터 (v1, v2, v3)
-     * @param prefix 값이 존재할 때 앞에 붙일 접두사 (예: "AND m.id IN ")
-     * @return 메서드 체이닝을 위한 현재 인스턴스
+     * @param key       템플릿 내의 치환 대상 키 (예: "where_clause")
+     * @param condition 유효성을 검사할 Boolean 조건
+     * @param content   값이 유효할 때 주입할 실제 내용 (Object의 toString()이 사용됨)
+     * @param prefix    내용 주입 시 앞에 붙일 접두사 (예: "ORDER BY ", "AND ")
+     * @param suffix    내용 주입 시 뒤에 붙일 접미사
+     * @return 메서드 체이닝을 위한 S2Template 인스턴스
+     * @apiNote
+     *          주로 정렬 조건이나 특정 비즈니스 로직의 참/거짓에 따라 문장을 삽입할 때 사용합니다.
+     *
+     *          <pre>{@code
+     * .bindWhen("order", pageable.isSorted(), "m.id", "ORDER BY ", " DESC")
+     * // 결과: pageable.isSorted()가 true면 "ORDER BY m.id DESC"
+     * }</pre>
      */
-    public S2Template bindInQuery(String key, Collection<?> values, String prefix) {
-        if (isValid(values)) {
-            String inClause = values.stream()
+    public S2Template bindWhen(String key, boolean condition, Object content, String prefix, String suffix) {
+        return doBindWhen(key, condition, content, prefix, suffix);
+    }
+
+    /**
+     * [Condition 기반 바인딩] 조건(condition)이 true일 때 지정된 내용(content)을 주입합니다.
+     * <p>
+     * 이 메서드는 {@code condition}의 논리 조건으로 트리거로 사용합니다.
+     * 유효할 경우, {@code prefix}와 {@code content}를 결합하여 템플릿의 키를 치환합니다.
+     * 주로 동적 쿼리에서 {@code AND}, {@code ORDER BY} 절과 같은 문장 자체를 조건부로 삽입할 때 유용합니다.
+     * </p>
+     *
+     * @param key       템플릿 내의 치환 대상 키 (예: "where_clause")
+     * @param condition 유효성을 검사할 Boolean 조건
+     * @param content   값이 유효할 때 주입할 실제 내용 (Object의 toString()이 사용됨)
+     * @param prefix    내용 주입 시 앞에 붙일 접두사 (예: "ORDER BY ", "AND ")
+     * @return 메서드 체이닝을 위한 S2Template 인스턴스
+     * @apiNote
+     *          주로 정렬 조건이나 특정 비즈니스 로직의 참/거짓에 따라 문장을 삽입할 때 사용합니다.
+     *
+     *          <pre>{@code
+     * .bindWhen("order", pageable.isSorted(), "m.id DESC", "ORDER BY ")
+     * // 결과: pageable.isSorted()가 true면 "ORDER BY m.id DESC"
+     * }</pre>
+     */
+    public S2Template bindWhen(String key, boolean condition, Object content, String prefix) {
+        return doBindWhen(key, condition, content, prefix, null);
+    }
+
+    /**
+     * [Condition 기반 바인딩] 조건(condition)이 true일 때 지정된 내용(content)을 주입합니다.
+     * <p>
+     * 이 메서드는 {@code condition}의 논리 조건으로 트리거로 사용합니다.
+     * 유효할 경우, {@code content}로 템플릿의 키를 치환합니다.
+     * 주로 동적 쿼리에서 {@code AND}, {@code ORDER BY} 절과 같은 문장 자체를 조건부로 삽입할 때 유용합니다.
+     * </p>
+     *
+     * @param key       템플릿 내의 치환 대상 키 (예: "where_clause")
+     * @param condition 유효성을 검사할 Boolean 조건
+     * @param content   값이 유효할 때 주입할 실제 내용 (Object의 toString()이 사용됨)
+     * @return 메서드 체이닝을 위한 S2Template 인스턴스
+     * @apiNote
+     *          주로 정렬 조건이나 특정 비즈니스 로직의 참/거짓에 따라 문장을 삽입할 때 사용합니다.
+     *
+     *          <pre>{@code
+     * .bindWhen("order", pageable.isSorted(), "m.id DESC")
+     * // 결과: pageable.isSorted()가 true면 "m.id DESC"
+     * }</pre>
+     */
+    public S2Template bindWhen(String key, boolean condition, Object content) {
+        return doBindWhen(key, condition, content, null, null);
+    }
+
+    /**
+     * [Presence 기반 바인딩] 값(presence)이 존재할 때 지정된 내용(content)을 주입합니다.
+     * <p>
+     * 이 메서드는 {@code presence}의 유효성(null 아님, 비어 있지 않음)을 트리거로 사용합니다.
+     * 유효할 경우, {@code prefix}와 {@code content}를 결합하여 템플릿의 키를 치환합니다.
+     * 주로 동적 쿼리에서 {@code AND}, {@code ORDER BY} 절과 같은 문장 자체를 조건부로 삽입할 때 유용합니다.
+     * </p>
+     *
+     * @param key      템플릿 내의 치환 대상 키 (예: "where_clause")
+     * @param presence 유효성을 검사할 기준 값 혹은 Boolean 조건
+     * @param content  값이 유효할 때 주입할 실제 내용 (Object의 toString()이 사용됨)
+     * @param prefix   내용 주입 시 앞에 붙일 접두사 (예: "ORDER BY ", "AND ")
+     * @param suffix   내용 주입 시 뒤에 붙일 접미사
+     * @return 메서드 체이닝을 위한 S2Template 인스턴스
+     * @apiNote
+     *          {@code presence}는 존재 여부를 판단하는 트리거 역할만 하며, 실제 치환은 {@code content}로 이루어집니다.
+     *
+     *          <pre>{@code
+     * .bindWhen("stage", stage, ":stage", "AND s.stage IN (", ")")
+     * // 결과: stage가 존재하면 "AND s.stage IN (:stage)"
+     * }</pre>
+     */
+    public S2Template bindWhen(String key, Object presence, Object content, String prefix, String suffix) {
+        return doBindWhen(key, presence, content, prefix, suffix);
+    }
+
+    /**
+     * [Presence 기반 바인딩] 값(presence)이 존재할 때 지정된 내용(content)을 주입합니다.
+     * <p>
+     * 이 메서드는 {@code presence}의 유효성(null 아님, 비어 있지 않음)을 트리거로 사용합니다.
+     * 유효할 경우, {@code prefix}와 {@code content}를 결합하여 템플릿의 키를 치환합니다.
+     * 주로 동적 쿼리에서 {@code AND}, {@code ORDER BY} 절과 같은 문장 자체를 조건부로 삽입할 때 유용합니다.
+     * </p>
+     *
+     * @param key      템플릿 내의 치환 대상 키 (예: "where_clause")
+     * @param presence 유효성을 검사할 기준 값 혹은 Boolean 조건
+     * @param content  값이 유효할 때 주입할 실제 내용 (Object의 toString()이 사용됨)
+     * @param prefix   내용 주입 시 앞에 붙일 접두사 (예: "ORDER BY ", "AND ")
+     * @return 메서드 체이닝을 위한 S2Template 인스턴스
+     * @apiNote
+     *          {@code presence}는 존재 여부를 판단하는 트리거 역할만 하며, 실제 치환은 {@code content}로 이루어집니다.
+     *
+     *          <pre>{@code
+     * .bindWhen("stage", stage, "s.stage = :stage", "AND ")
+     * // 결과: stage가 존재하면 "AND s.stage = :stage"
+     * }</pre>
+     */
+    public S2Template bindWhen(String key, Object presence, Object content, String prefix) {
+        return doBindWhen(key, presence, content, prefix, null);
+    }
+
+    /**
+     * [Presence 기반 바인딩] 값(presence)이 존재할 때 지정된 내용(content)을 주입합니다.
+     * <p>
+     * 이 메서드는 {@code presence}의 유효성(null 아님, 비어 있지 않음)을 트리거로 사용합니다.
+     * 유효할 경우, {@code content}로 템플릿의 키를 치환합니다.
+     * 주로 동적 쿼리에서 {@code AND}, {@code ORDER BY} 절과 같은 문장 자체를 조건부로 삽입할 때 유용합니다.
+     * </p>
+     *
+     * @param key      템플릿 내의 치환 대상 키 (예: "where_clause")
+     * @param presence 유효성을 검사할 기준 객체 (null/blank 시 무시)
+     * @param content  값이 유효할 때 주입할 실제 내용 (Object의 toString()이 사용됨)
+     * @return 메서드 체이닝을 위한 S2Template 인스턴스
+     * @apiNote
+     *          {@code presence}는 존재 여부를 판단하는 트리거 역할만 하며, 실제 치환은 {@code content}로 이루어집니다.
+     *
+     *          <pre>{@code
+     * .bindWhen("stage", stage, "s.stage = :stage")
+     * // 결과: stage가 존재하면 "s.stage = :stage"
+     * }</pre>
+     */
+    public S2Template bindWhen(String key, Object presence, Object content) {
+        return doBindWhen(key, presence, content, null, null);
+    }
+
+    /**
+     * [Condition/Presence 기반 바인딩] 조건이 충족되거나 값이 존재할 때 지정된 내용(content)을 주입합니다.
+     * <p>
+     * 이 메서드는 {@code value}의 유효성(null 아님, 비어 있지 않음, 혹은 true)을 트리거로 사용합니다.
+     * 유효할 경우, {@code prefix}와 {@code content}를 결합하여 템플릿의 키를 치환합니다.
+     * 주로 동적 쿼리에서 {@code AND}, {@code ORDER BY} 절과 같은 문장 자체를 조건부로 삽입할 때 유용합니다.
+     * </p>
+     *
+     * @param key       템플릿 내의 치환 대상 키 (예: "where_clause")
+     * @param condition 유효성을 검사할 기준 값 혹은 Boolean 조건
+     * @param content   값이 유효할 때 주입할 실제 내용 (Object의 toString()이 사용됨)
+     * @param prefix    내용 주입 시 앞에 붙일 접두사 (예: "ORDER BY ", "AND ")
+     * @param suffix    내용 주입 시 뒤에 붙일 접미사
+     * @return 메서드 체이닝을 위한 S2Template 인스턴스
+     */
+    private S2Template doBindWhen(String key, Object condition, Object content, String prefix, String suffix) {
+        String p = (prefix != null && !prefix.isBlank()) ? prefix : "";
+        String s = (suffix != null && !suffix.isBlank()) ? suffix : "";
+        String value = isValid(condition) && S2Util.isNotEmpty(content) ? p + content.toString() + s : "";
+        bindings.put(key, value);
+        return this;
+    }
+
+    /**
+     * [Collection 기반 바인딩] 컬렉션이 유효할 때,
+     * 요소들을 연결하여 지정된 접두사와 접미사로 감싸 주입합니다.
+     *
+     * @param key    템플릿 내의 치환 대상 키
+     * @param values 유효성을 검사할 컬렉션 (null/empty 시 무시)
+     * @param prefix 결과물 시작 문구 (예: "AND id IN (")
+     * @param suffix 결과물 종료 문구 (예: ")")
+     * @return 메서드 체이닝을 위한 현재 인스턴스
+     * @apiNote
+     *          SQL IN 절 생성 외에도 조건에 따른 리스트 문자열 화에 범용적으로 사용됩니다.
+     *
+     *          <pre>{@code
+     * List<Integer> ids = List.of(1, 2, 3);
+     * // 예시: 활성화 상태일 때만 IN 절 생성
+     * .bindIn("ids", ids, "AND id IN (", ")")
+     * // 결과: ids가 Collection 값이 있다면 "AND id IN (1, 2, 3)"
+     * }</pre>
+     */
+    public S2Template bindIn(String key, Collection<?> values, String prefix, String suffix) {
+        return bindIn(key, true, values, prefix, suffix);
+    }
+
+    /**
+     * [Collection 기반 바인딩] 컬렉션이 유효할 때,
+     * 요소들을 연결하여 지정된 접두사를 붙여 주입합니다.
+     *
+     * @param key    템플릿 내의 치환 대상 키
+     * @param values 유효성을 검사할 컬렉션 (null/empty 시 무시)
+     * @param prefix 결과물 시작 문구 (예: "AND id IN (")
+     * @return 메서드 체이닝을 위한 현재 인스턴스
+     * @apiNote
+     *          SQL IN 절 생성 외에도 조건에 따른 리스트 문자열 화에 범용적으로 사용됩니다.
+     *
+     *          <pre>{@code
+     * List<String> order = List.of("name", "age", "created_at");
+     * // 예시: 활성화 상태일 때만 IN 절 생성
+     * .bindIn("order", order, "ORDER BY ")
+     * // 결과: order Collection 값이 있다면 "ORDER BY name, age, created_at"
+     * }</pre>
+     */
+    public S2Template bindIn(String key, Collection<?> values, String prefix) {
+        return bindIn(key, true, values, prefix, null);
+    }
+
+    /**
+     * [Collection 기반 바인딩] 컬렉션이 유효할 때,
+     * 요소들을 연결하여 주입합니다.
+     *
+     * @param key    템플릿 내의 치환 대상 키
+     * @param values 유효성을 검사할 컬렉션 (null/empty 시 무시)
+     * @return 메서드 체이닝을 위한 현재 인스턴스
+     * @apiNote
+     *          SQL IN 절 생성 외에도 조건에 따른 리스트 문자열 화에 범용적으로 사용됩니다.
+     *
+     *          <pre>{@code
+     * List<String> order = List.of("name", "age", "created_at");
+     * // 예시: 활성화 상태일 때만 IN 절 생성
+     * .bindIn("order", order)
+     * // 결과: order Collection 값이 있다면 "name, age, created_at"
+     * }</pre>
+     */
+    public S2Template bindIn(String key, Collection<?> values) {
+        return bindIn(key, true, values, null, null);
+    }
+
+    /**
+     * [Collection 기반 바인딩] 조건이 충족되고 컬렉션이 유효할 때,
+     * 요소들을 연결하여 지정된 접두사와 접미사로 감싸 주입합니다.
+     *
+     * @param key       템플릿 내의 치환 대상 키
+     * @param condition 바인딩 여부를 결정하는 논리 조건
+     * @param values    유효성을 검사할 컬렉션 (null/empty 시 무시)
+     * @param prefix    결과물 시작 문구 (예: "AND id IN (")
+     * @param suffix    결과물 종료 문구 (예: ")")
+     * @return 메서드 체이닝을 위한 현재 인스턴스
+     * @apiNote
+     *          SQL IN 절 생성 외에도 조건에 따른 리스트 문자열 화에 범용적으로 사용됩니다.
+     *
+     *          <pre>{@code
+     * List<Integer> ids = List.of(1, 2, 3);
+     * // 예시: 활성화 상태일 때만 IN 절 생성
+     * .bindIn("ids", isActive, ids, "AND id IN (", ")")
+     * // 결과: isActive가 true이고 Collection 값이 있다면 "AND id IN (1, 2, 3)"
+     * }</pre>
+     */
+    public S2Template bindIn(String key, boolean condition, Collection<?> values, String prefix, String suffix) {
+        if (condition && isValid(values)) {
+            String result = values.stream()
                     .map(this::formatQueryValue)
-                    .collect(Collectors.joining(", ", "(", ")"));
-            bindings.put(key, prefix + inClause);
+                    .collect(
+                            Collectors.joining(
+                                    ", ",
+                                    (prefix != null ? prefix : ""),
+                                    (suffix != null ? suffix : "")
+                            )
+                    );
+            bindings.put(key, result);
         } else {
             bindings.put(key, "");
         }

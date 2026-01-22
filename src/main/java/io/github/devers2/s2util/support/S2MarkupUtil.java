@@ -43,9 +43,9 @@ public class S2MarkupUtil {
      * @param markupString 마크업 문자열
      * @param tagName      태그
      * @return 최상위 태그인 경우 true
-     * @implNote html 태그(&lt;html&gt;)가 최상위 태그인지 확인
+     * @apiNote html 태그(&lt;html&gt;)가 최상위 태그인지 확인
      *
-     *           <pre>{@code
+     *          <pre>{@code
      * String htmlString = S2FileUtil.readFile("c:/test.html");
      * boolean isTopLevelTag = S2MarkupUtil.isTopLevelTag(htmlString, "html");
      * }</pre>
@@ -91,9 +91,9 @@ public class S2MarkupUtil {
      * @param removeTagName 삭제할 태그
      * @return 삭제된 HTML 문자열
      *
-     * @implNote 최상위 html 태그 제거(&lt;html&gt;)
+     * @apiNote 최상위 html 태그 제거(&lt;html&gt;)
      *
-     *           <pre>{@code
+     *          <pre>{@code
      * String htmlString = S2FileUtil.readFile("c:/test.html");
      * htmlString = S2MarkupUtil.removeTopLevelTag(htmlString, "html");
      * }</pre>
@@ -149,9 +149,9 @@ public class S2MarkupUtil {
      * @param removeTagName 삭제할 태그
      * @return 제거된 HTML 문자열
      *
-     * @implNote script 태그 제거(&lt;script&gt;)
+     * @apiNote script 태그 제거(&lt;script&gt;)
      *
-     *           <pre>{@code
+     *          <pre>{@code
      * String htmlString = S2FileUtil.readFile("c:/test.html");
      * htmlString = S2MarkupUtil.removeTagContent(htmlString, "script");
      * }</pre>
@@ -188,9 +188,9 @@ public class S2MarkupUtil {
      * @param removeTagName 삭제할 태그
      * @return 제거된 HTML 문자열
      *
-     * @implNote test.html 파일에서 불완전한 div 태그(&lt;div&gt;) 제거하여 new.html 파일에 작성
+     * @apiNote test.html 파일에서 불완전한 div 태그(&lt;div&gt;) 제거하여 new.html 파일에 작성
      *
-     *           <pre>{@code
+     *          <pre>{@code
      * S2FileUtil.writeFile("c:/new.html", S2MarkupUtil.removeIncompleteTag(S2FileUtil.readFile("c:/test.html"), "div"));
      * }</pre>
      *

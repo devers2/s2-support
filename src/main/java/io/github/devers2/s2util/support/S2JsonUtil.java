@@ -115,9 +115,9 @@ public class S2JsonUtil {
      *
      * @param object JSON으로 변환할 객체 (Map, POJO, List 등)
      * @return 객체를 나타내는 JSON 문자열. 변환에 실패하면 null을 반환
-     * @implNote
+     * @apiNote
      *
-     *           <pre>{@code
+     *          <pre>{@code
      * // Map 직렬화
      * Map<String, Object> data = new HashMap<>();
      * data.put("name", "홍길동");
@@ -153,9 +153,9 @@ public class S2JsonUtil {
      * @param object   JSON으로 변환할 객체 (Map, POJO, List 등)
      * @param features 선택적으로 활성화할 Feature 배열
      * @return 객체를 나타내는 JSON 문자열. 변환에 실패하면 null을 반환
-     * @implNote
+     * @apiNote
      *
-     *           <pre>{@code
+     *          <pre>{@code
      * // 특수 숫자 값 포함 직렬화
      * Map<String, Object> data = new HashMap<>();
      * data.put("normal", 123.45);
@@ -357,9 +357,9 @@ public class S2JsonUtil {
      * @param jsonString 파싱할 JSON 형식의 문자열
      * @return 파싱된 Map 객체. 파싱에 실패하면 null을 반환
      * @throws IllegalArgumentException jsonString이 null이거나 빈 문자열인 경우
-     * @implNote
+     * @apiNote
      *
-     *           <pre>{@code
+     *          <pre>{@code
      * // 기본 JSON 파싱
      * String json = "{\"name\":\"홍길동\",\"age\":30,\"active\":true}";
      * Map<String, Object> data = S2JsonUtil.parseJson(json);
@@ -384,9 +384,9 @@ public class S2JsonUtil {
      * @param features   선택적으로 활성화할 Feature 가변 인자
      * @return 파싱된 Map 객체. 파싱에 실패하면 null을 반환
      * @throws IllegalArgumentException jsonString이 null이거나 빈 문자열인 경우
-     * @implNote
+     * @apiNote
      *
-     *           <pre>
+     *          <pre>
      *          {@code
      * // 주석이 포함된 JSON 파싱
      * String jsonWithComments = """{
@@ -443,9 +443,9 @@ public class S2JsonUtil {
      * @param <T>        대상 클래스 타입
      * @return 파싱된 객체. 파싱에 실패하면 null을 반환
      * @throws IllegalArgumentException jsonString이 null이거나 빈 문자열인 경우
-     * @implNote
+     * @apiNote
      *
-     *           <pre>{@code
+     *          <pre>{@code
      * // POJO로 파싱
      * public class User {
      *     private String name;
@@ -480,9 +480,9 @@ public class S2JsonUtil {
      * @param <T>        대상 클래스 타입
      * @return 파싱된 객체. 파싱에 실패하면 null을 반환
      * @throws IllegalArgumentException jsonString이 null이거나 빈 문자열이거나, valueType이 null인 경우
-     * @implNote
+     * @apiNote
      *
-     *           <pre>{@code
+     *          <pre>{@code
      * // 주석이 포함된 JSON을 POJO로 파싱
      * public class Product {
      *     private String name;

@@ -334,9 +334,9 @@ public class S2FileUtil {
      *          <dd>- overwrite가 true면 target에 동일 이름의 파일/디렉토리가 존재할 경우 덮어씀</dd>
      *          <dd>- 복사 시 파일의 속성(메타데이터)도 함께 복사</dd>
      *          </dl>
-     * @implNote source.html 파일을 target.html 파일로 sample 디렉토리에 복사(중복 파일 존재 시 덮어쓰기)
+     * @apiNote source.html 파일을 target.html 파일로 sample 디렉토리에 복사(중복 파일 존재 시 덮어쓰기)
      *
-     *           <pre>{@code
+     *          <pre>{@code
      * S2FileUtil.copy(Paths.get("c:/source.html"), Paths.get("c:/sample"), true);
      * }</pre>
      *
@@ -402,9 +402,9 @@ public class S2FileUtil {
      *          <dd>- 파일 시스템 간 이동이거나 디렉토리 이동이 실패할 경우 복사 후 원본 삭제 방식으로 동작</dd>
      *          <dd>- 단일 파일 이동 시 원자적 이동(ATOMIC_MOVE)을 우선 시도</dd>
      *          </dl>
-     * @implNote source.html 파일을 target.html 파일로 sample 디렉토리에 이동(중복 파일 존재 시 덮어쓰기)
+     * @apiNote source.html 파일을 target.html 파일로 sample 디렉토리에 이동(중복 파일 존재 시 덮어쓰기)
      *
-     *           <pre>{@code
+     *          <pre>{@code
      * S2FileUtil.move(Paths.get("c:/source.html"), Paths.get("c:/sample"), true);
      * }</pre>
      *
@@ -1231,9 +1231,9 @@ public class S2FileUtil {
      * @param outputStream   ZIP 파일이 작성될 출력 스트림. 호출자가 제공해야 하며, 이 메서드에서 닫히지 않습니다.
      * @throws IOException              ZIP 생성 또는 스트림 처리 중 I/O 오류가 발생할 경우
      * @throws IllegalArgumentException sourceFileList 또는 outputStream 가 null 이거나 비어 있을때
-     * @implNote
+     * @apiNote
      *
-     *           <pre>{@code
+     *          <pre>{@code
      * List<Entry<String, InputStream>> sourceFileList = Arrays.asList(
      *     Map.entry("file1.txt", new ByteArrayInputStream("파일1 내용".getBytes())),
      *     Map.entry("file2.txt", new ByteArrayInputStream("파일2 내용".getBytes()))

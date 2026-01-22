@@ -110,9 +110,9 @@ public class S2PaginationInfo<T> {
     /**
      * 랜더링될 페이지 라벨을 설정한다.
      *
-     * @implNote
+     * @apiNote
      *
-     *           <pre>{@code
+     *          <pre>{@code
      * protected void initPageLabels() {
      *     this.setPageLabels(new String[] { 처음 페이지 라벨, 이전 페이지 라벨, 현재 페이지 라벨, 다른 페이지 라벨, 다음 페이지 라벨, 마지막 페이지 라벨 });
      * }
