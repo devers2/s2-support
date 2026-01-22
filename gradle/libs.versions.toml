@@ -9,7 +9,7 @@ java = "21"
 jsr305 = "3.0.2"
 
 # S2Util Libraries
-s2-util = "1.0.1"
+s2-util = "1.0.2"
 
 # Dependencies
 aspectj = "1.9.25.1"
