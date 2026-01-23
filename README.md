@@ -74,7 +74,6 @@ dependencies {
     implementation 'jakarta.servlet:jakarta.servlet-api:6.1.0'
     implementation 'jakarta.servlet.jsp:jakarta.servlet.jsp-api:4.0.0'
     implementation 'org.aspectj:aspectjweaver:1.9.25.1'
-    implementation 'jakarta.persistence:jakarta.persistence-api:3.1.0'
 }
 ```
 

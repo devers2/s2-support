@@ -440,7 +440,6 @@ dependencies {
      * - 런타임에 반드시 필요한 라이브러리인 경우 이 방식을 사용함
      */
     implementation(libs.s2.core)
-    implementation(libs.s2.validator)
 
     implementation(libs.jsch) // SFTP
     implementation(libs.commons.pool2) // Object Pooling
@@ -465,7 +464,6 @@ dependencies {
     compileOnly(libs.jakarta.servlet.api) // Java 17 이상으로 개발하므로 jakarta 가 표준
     compileOnly(libs.jakarta.servlet.jsp) // Java 17 이상으로 개발하므로 jakarta 가 표준
     compileOnly(libs.aspectj.weaver)
-    compileOnly(libs.jakarta.persistence.api) // JPQL
 
     /**
      * testImplementation: 테스트 컴파일 및 런타임 시 모두 사용
