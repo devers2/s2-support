@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import io.github.devers2.s2util.core.S2Cache;
 import io.github.devers2.s2util.log.S2LogManager;
 import io.github.devers2.s2util.log.S2Logger;
 
@@ -278,8 +279,12 @@ public class S2JsonUtil {
         boolean first = true;
 
         Class<?> clazz = pojo.getClass();
-        var fields = clazz.getDeclaredFields();
+        var optionalFields = S2Cache.getFields(clazz);
+        if (optionalFields.isEmpty()) {
+            return;
+        }
 
+        var fields = optionalFields.get();
         for (var field : fields) {
             if (java.lang.reflect.Modifier.isStatic(field.getModifiers()) ||
                     java.lang.reflect.Modifier.isTransient(field.getModifiers())) {
