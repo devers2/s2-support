@@ -20,7 +20,7 @@ Add the following dependency to your `build.gradle`.
 
 ```groovy
 dependencies {
-    implementation 'io.github.devers2.internal:s2-support:1.0.0'
+    implementation 'io.github.devers2.internal:s2-support:1.0.6'
 }
 ```
 
