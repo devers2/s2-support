@@ -27,9 +27,8 @@
 plugins {
     id 'java-library'
     id 'maven-publish'
-    alias(libs.plugins.s2.build.support)
-
     id 'signing'
+    alias(libs.plugins.s2.build.support)
 
     /*
      * ⭐ 'shadow' 플러그인을 적용하면 -all 타겟이 추가되어 의존성을 추가한 JAR 가 생성된다.
@@ -164,7 +163,6 @@ ext {
     safeTasks = ['assemble', 'build', 'jar', 'sourcesJar', 'publishToMavenLocal'] as Set
 
 
-
     // ========================================================================
     // ⭐ [상수 및 환경 설정 (Constants & Environment)]
     // 프로젝트 구조나 외부 환경과 관련된 설정 (변경 빈도 낮음)
@@ -178,7 +176,6 @@ ext {
     GITHUB_USER = project.findProperty('gpr.user') ?: System.getenv('GITHUB_ACTOR')
     GITHUB_TOKEN = project.findProperty('gpr.key') ?: System.getenv('GITHUB_TOKEN')
 }
-
 
 
 // ========================================================================
@@ -204,8 +201,6 @@ if (project.hasProperty('targetSources')) {
     def sources = targetSourcesVal.toString().split(',')
     project.ext.activeFeatures = sources.collect { it.trim() } as Set
 }
-
-
 
 
 // --------------------------------------------------------------------------------------
