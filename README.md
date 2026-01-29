@@ -70,6 +70,7 @@ This library is provided under the **Apache License 2.0**. You are free to use, 
 ```groovy
 dependencies {
     // Essential runtime dependencies for optional functionalities
+    implementation 'io.github.devers2:s2-core:1.1.5'
     implementation 'org.springframework:spring-context:6.1.1'
     implementation 'jakarta.servlet:jakarta.servlet-api:6.1.0'
     implementation 'jakarta.servlet.jsp:jakarta.servlet.jsp-api:4.0.0'
