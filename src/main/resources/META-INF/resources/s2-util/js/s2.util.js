@@ -403,7 +403,29 @@ export const S2Util = {
             const error = new Error(`HTTP error! status: ${response.status}`);
             error.status = response.status;
             error.statusText = response.statusText;
-            error.message = errorData;
+            try {
+              if (S2Util.isJSON(errorData)) {
+                const jsonErrorData = typeof errorData === 'string' ? JSON.parse(errorData) : errorData;
+                error.body = jsonErrorData;
+
+                if (jsonErrorData.error) {
+                  error.error = jsonErrorData.error;
+                }
+                if (jsonErrorData.message) {
+                  error.message = jsonErrorData.message;
+                }
+
+                if (!error.error && !error.message) {
+                  // 확인되는 메시지가 없을 때 전체 JSON 문자열을 메시지로 사용한다.
+                  error.message = JSON.stringify(jsonErrorData);
+                }
+              } else {
+                error.message = errorData;
+              }
+            } catch {
+              // if parsing fails, keep raw text
+              error.message = errorData;
+            }
             throw error;
           });
         }
@@ -437,7 +459,10 @@ export const S2Util = {
             result['data'] = response.text();
             break;
           default:
-            result['data'] = response.json();
+            result['data'] = response.text().then((text) => {
+              // 텍스트로 먼저 받고 내용이 있을 때만 파싱
+              return text && S2Util.isJSON(text) && typeof text === 'string' ? JSON.parse(text) : text;
+            });
             break;
         }
 
@@ -461,6 +486,14 @@ export const S2Util = {
           });
         } else {
           result.data.then((data) => {
+            if (!data) {
+              // 데이터가 없는 경우(Void 응답)도 성공으로 처리
+              if (success && typeof success === 'function') {
+                success();
+              }
+              return;
+            }
+
             if (S2Util.isJSON(data)) {
               let ok = true;
               if (Object.prototype.hasOwnProperty.call(data, 'status')) {
@@ -500,18 +533,22 @@ export const S2Util = {
       .catch((error) => {
         if (disableDefaultErrorHandler !== true && disableDefaultErrorHandler !== 'true') {
           if (error.name === 'AbortError') {
-            S2Util.alert('요청 시간이 초과되었습니다.');
+            S2Util.showToast('요청 시간이 초과되었습니다.');
           } else if (typeof error.message === 'string' && (error.message.startsWith('S2Exception:') || error.message.startsWith('S2RuntimeException:'))) {
-            S2Util.alert(error.message);
+            S2Util.showToast(error.message);
           } else if (error.status === 401) {
             S2Util.confirm('인증이 필요합니다.<br/>로그인 페이지로 이동하시겠습니까?', function () {
               // 로그인 페이지로 리다이렉트 등 추가 처리 가능
               location.href = '/login';
             });
           } else if (error.status === 403) {
-            S2Util.alert('접근 권한이 없습니다.');
+            S2Util.showToast('접근 권한이 없습니다.');
           } else {
-            S2Util.alert(error.message && error.message.length < 100 ? error.message : '오류가 발생했습니다.');
+            let errorMessage = error.error;
+            if (!errorMessage) {
+              errorMessage = error.message ? error.message : error.body;
+            }
+            S2Util.showToast(errorMessage && errorMessage.length < 100 ? errorMessage : '오류가 발생했습니다.');
           }
         }
 
@@ -2097,6 +2134,7 @@ export const S2Util = {
    * @param {string} [option.titleAlign = 'center'] - 제목의 텍스트 정렬 (CSS 값).
    * @param {string} [option.titleSize = '1.125rem'] - 제목의 폰트 크기 (CSS 값).
    * @param {string} [option.headerHtml = ''] - 제목 외에 헤더에 추가될 HTML 콘텐츠.
+   * @param {boolean} [option.hideHeader = false] - 헤더를 숨기기.
    * @param {function} [callback] - 모달이 DOM에 추가된 후 실행될 콜백 함수. 첫 번째 인자로 모달의 셀렉터(#s2-modal-N)를 전달한다.
    * @returns {string} - 생성된 모달의 CSS 셀렉터 문자열 (예: '#s2-modal-1').
    *
@@ -2113,22 +2151,30 @@ export const S2Util = {
     const modelNo = document.querySelectorAll('.s2modal').length + 1;
     const modalSelector = `#s2-modal-${modelNo}`;
 
+    let modalHeader = '';
+    if (!option.hideHeader) {
+      modalHeader = `
+        <div class="modal-header">
+          <h2 class="modal-title" id="s2-modal-title-${modelNo}">${option.title || ''}&nbsp;</h2>
+          ${option.headerHtml ? option.headerHtml : ''}
+          <button class="close-button" aria-label="닫기">&times;</button>
+        </div>
+      `;
+    }
+
     S2Util.replaceChildren(
       document.body,
       `
-                <div id="s2-modal-${modelNo}" class="s2-modal" role="dialog" aria-modal="true" aria-labelledby="s2-modal-title-${modelNo}" aria-describedby="s2-modal-description-${modelNo}">
-                    <div class="modal-content" style="width: ${option.width ? option.width : '80%'}; height: ${option.height ? option.height : 'auto'}">
-                        <div class="modal-header">
-                            <h2 class="modal-title" id="s2-modal-title-${modelNo}" style="text-align: ${option.titleAlign ? option.titleAlign : 'center'}; font-size: ${option.titleSize ? option.titleSize : '1.125rem'}">${option.title || ''}&nbsp;</h2>
-                            ${option.headerHtml ? option.headerHtml : ''}
-                            <button class="close-button" aria-label="닫기">&times;</button>
-                        </div>
-                        <div class="modal-body" id="s2-modal-description-${modelNo}">
-                            ${content}
-                        </div>
-                    </div>
-                </div>
-            `,
+        <div id="s2-modal-${modelNo}" class="s2-modal" role="dialog" aria-modal="true" aria-labelledby="s2-modal-title-${modelNo}" aria-describedby="s2-modal-description-${modelNo}">
+          <div class="modal-content" style="width: ${option.width ? option.width : '80%'}; height: ${option.height ? option.height : 'auto'}">
+            ${modalHeader}
+            ${option.hideHeader ? '<button class="close-button no-header" aria-label="닫기">&times;</button>' : ''}
+            <div class="modal-body" id="s2-modal-description-${modelNo}">
+              ${content}
+            </div>
+          </div>
+        </div>
+      `,
       {
         isAppend: true,
         onNodeReady: (node) => {
