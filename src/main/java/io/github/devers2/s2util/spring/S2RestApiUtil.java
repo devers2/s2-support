@@ -54,6 +54,17 @@ public class S2RestApiUtil {
 
     private static final S2Logger logger = S2LogManager.getLogger(S2RestApiUtil.class);
 
+    private static final int DEFAULT_TIMEOUT = 30000;
+    private static final RestTemplate defaultRestTemplate;
+
+    static {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(DEFAULT_TIMEOUT);
+        factory.setReadTimeout(DEFAULT_TIMEOUT);
+        defaultRestTemplate = new RestTemplate(factory);
+        defaultRestTemplate.getMessageConverters().addFirst(new StringHttpMessageConverter(StandardCharsets.UTF_8));
+    }
+
     /**
      * 지정된 URL로 REST API를 호출하여 응답을 문자열로 반환한다.
      * 기본 타임아웃(30,000ms)을 사용하며, HTTP 메서드와 매개변수를 받아 요청을 처리한다.
@@ -97,40 +108,55 @@ public class S2RestApiUtil {
      * );
      * }</pre>
      */
+    @SuppressWarnings("null")
     @SafeVarargs
     public static String callApi(String url, HttpMethod method, Integer timeout, Map.Entry<String, Object>... params) {
-        int vTimeout = timeout != null && timeout > 0 ? timeout : 30000;
+        int vTimeout = timeout != null && timeout > 0 ? timeout : DEFAULT_TIMEOUT;
 
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(vTimeout);
-        requestFactory.setReadTimeout(vTimeout);
-
-        RestTemplate restTemplate = new RestTemplate(requestFactory);
-
-        // UTF-8 메시지 컨버터 설정
-        restTemplate.getMessageConverters().addFirst(new StringHttpMessageConverter(StandardCharsets.UTF_8));
-
-        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-        if (params != null) {
-            for (Map.Entry<String, Object> param : params) {
-                if (param != null) {
-                    body.add(param.getKey(), param.getValue());
-                }
-            }
+        RestTemplate restTemplate;
+        if (vTimeout == DEFAULT_TIMEOUT) {
+            restTemplate = defaultRestTemplate;
+        } else {
+            SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+            requestFactory.setConnectTimeout(vTimeout);
+            requestFactory.setReadTimeout(vTimeout);
+            restTemplate = new RestTemplate(requestFactory);
+            restTemplate.getMessageConverters().addFirst(new StringHttpMessageConverter(StandardCharsets.UTF_8));
         }
 
         HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
         headers.setAcceptCharset(Collections.singletonList(StandardCharsets.UTF_8));
 
         String result = null;
-        HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
         ResponseEntity<String> responseEntity = null;
 
         if (method == HttpMethod.POST) {
+            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+            if (params != null) {
+                for (Map.Entry<String, Object> param : params) {
+                    if (param != null) {
+                        body.add(param.getKey(), param.getValue());
+                    }
+                }
+            }
+
+            headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+            HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
             responseEntity = restTemplate.postForEntity(url, requestEntity, String.class);
         } else if (method == HttpMethod.GET) {
-            responseEntity = restTemplate.exchange(url, HttpMethod.GET, requestEntity, String.class);
+            UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(url);
+            if (params != null) {
+                for (Map.Entry<String, Object> param : params) {
+                    if (param != null) {
+                        builder.queryParam(param.getKey(), param.getValue());
+                    }
+                }
+            }
+
+            // URI 객체를 직접 사용하여 이중 인코딩 방지
+            java.net.URI uri = builder.build().encode().toUri();
+            HttpEntity<Void> requestEntity = new HttpEntity<>(headers);
+            responseEntity = restTemplate.exchange(uri, HttpMethod.GET, requestEntity, String.class);
         }
 
         if (responseEntity != null && responseEntity.getBody() != null) {
@@ -150,13 +176,13 @@ public class S2RestApiUtil {
      * @param inputStream   전송할 데이터의 {@link InputStream}. (필수)
      * @param filename      다운로드될 확장자를 포함한 파일 이름. (필수)
      * @param contentLength 전송할 데이터의 총 길이 (바이트 단위). (필수, 0 이상)
-     *                      !!s2!! contentLength 가 없는 경우 InputStream 을 두번읽으면서 오류나 날수 있어 반드시 넣어야 한다.
+     *                      ※ contentLength 가 없는 경우 InputStream 을 두번읽으면서 오류나 날수 있어 반드시 넣어야 한다.
      * @return 파일명과 콘텐츠 길이가 설정된 새로운 {@link InputStreamResource} 객체.
      * @throws IllegalArgumentException {@code inputStream} 또는 {@code filename}이 null이거나 {@code contentLength}가 음수인 경우.
      * @details
      *          <dl>
      *          <dd>InputStreamResource 를 사용할 때 Content-Length를 미리 계산해 설정하면 Spring 이 스트림을 미리 읽지 않는다.</dd>
-     *          <dd>!!s2!! 즉 Content-Length 명시하지 않으면 InputStreamResource 를 2번 읽으면서 java.lang.IllegalStateException 예외가 발생한다.</dd>
+     *          <dd>※ 즉 Content-Length 명시하지 않으면 InputStreamResource 를 2번 읽으면서 java.lang.IllegalStateException 예외가 발생한다.</dd>
      *          </dl>
      */
     public static InputStreamResource createInputStreamResource(InputStream inputStream, String filename, long contentLength) {
