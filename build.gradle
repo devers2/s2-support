@@ -49,7 +49,7 @@ import io.github.devers2.buildsupport.S2BuildUtils
  *   이렇게 하면 의존성 관리 도구가 서로 다른 아티팩트로 인식하여 같은 리포지토리라도 별도 아티팩트로 취급된다.
  */
 group = 'io.github.devers2.internal'
-version = '1.1.0'
+version = '1.1.1'
 
 // 전역 변수 선언
 ext {
@@ -140,7 +140,6 @@ ext {
      * 기본 제외 소스 목록 (항상 제외되는 파일들)
      */
     excludedSources = [
-        'io/github/devers2/s2util/support/S2RestApiUtil.java.txt',
         'io/github/devers2/s2util/file/impl/SpringSftpConfig.java.txt',
         'io/github/devers2/s2util/file/impl/SpringSftpFileManagerImpl.java.txt'
     ] as Set
@@ -455,6 +454,7 @@ dependencies {
      */
     compileOnly(libs.s2.core)
     compileOnly(libs.spring6.context) // Java 17 이상으로 개발하므로 Spring 6 및 Spring Boot 3 계열이 표준
+    compileOnly(libs.spring6.web) // Java 17 이상으로 개발하므로 Spring 6 및 Spring Boot 3 계열이 표준
     compileOnly(libs.jakarta.servlet.api) // Java 17 이상으로 개발하므로 jakarta 가 표준
     compileOnly(libs.jakarta.servlet.jsp) // Java 17 이상으로 개발하므로 jakarta 가 표준
     compileOnly(libs.aspectj.weaver)

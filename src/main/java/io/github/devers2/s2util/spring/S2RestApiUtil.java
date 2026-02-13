@@ -18,18 +18,16 @@
  *
  * For more information, please see the LICENSE file in the root directory.
  */
-package io.github.devers2.s2util.support;
+package io.github.devers2.s2util.spring;
 
 import java.io.InputStream;
+import java.net.http.HttpHeaders;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.Map;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -40,6 +38,8 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
 import io.github.devers2.s2util.core.S2StringUtil;
+import io.github.devers2.s2util.log.S2LogManager;
+import io.github.devers2.s2util.log.S2Logger;
 
 /**
  * s2's utilities
@@ -52,7 +52,7 @@ import io.github.devers2.s2util.core.S2StringUtil;
  */
 public class S2RestApiUtil {
 
-    private static final Logger logger = LoggerFactory.getLogger(S2RestApiUtil.class);
+    private static final S2Logger logger = S2LogManager.getLogger(S2RestApiUtil.class);
 
     /**
      * 지정된 URL로 REST API를 호출하여 응답을 문자열로 반환한다.
@@ -88,7 +88,7 @@ public class S2RestApiUtil {
      * @return API 호출 결과로 반환된 문자열 응답. 응답이 없거나 오류 발생 시 null을 반환.
      * @apiNote
      *
-     *           <pre>{@code
+     *          <pre>{@code
      * String result = S2RestApiUtil.callApi("request.api", HttpMethod.POST, 10000,
      *     Map.entry("param1", value1),
      *     Map.entry("param2", value2),
