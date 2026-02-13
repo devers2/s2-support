@@ -21,13 +21,13 @@
 package io.github.devers2.s2util.spring;
 
 import java.io.InputStream;
-import java.net.http.HttpHeaders;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.Map;
 
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -36,6 +36,7 @@ import org.springframework.http.converter.StringHttpMessageConverter;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import io.github.devers2.s2util.core.S2StringUtil;
 import io.github.devers2.s2util.log.S2LogManager;
@@ -62,7 +63,7 @@ public class S2RestApiUtil {
         factory.setConnectTimeout(DEFAULT_TIMEOUT);
         factory.setReadTimeout(DEFAULT_TIMEOUT);
         defaultRestTemplate = new RestTemplate(factory);
-        defaultRestTemplate.getMessageConverters().addFirst(new StringHttpMessageConverter(StandardCharsets.UTF_8));
+        defaultRestTemplate.getMessageConverters().add(0, new StringHttpMessageConverter(StandardCharsets.UTF_8));
     }
 
     /**
@@ -121,7 +122,7 @@ public class S2RestApiUtil {
             requestFactory.setConnectTimeout(vTimeout);
             requestFactory.setReadTimeout(vTimeout);
             restTemplate = new RestTemplate(requestFactory);
-            restTemplate.getMessageConverters().addFirst(new StringHttpMessageConverter(StandardCharsets.UTF_8));
+            restTemplate.getMessageConverters().add(0, new StringHttpMessageConverter(StandardCharsets.UTF_8));
         }
 
         HttpHeaders headers = new HttpHeaders();
