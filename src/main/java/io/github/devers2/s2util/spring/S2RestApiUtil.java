@@ -51,6 +51,7 @@ import io.github.devers2.s2util.log.S2Logger;
  * @version 1.0
  * @since 2025. 01. 09.
  */
+@SuppressWarnings("null")
 public class S2RestApiUtil {
 
     private static final S2Logger logger = S2LogManager.getLogger(S2RestApiUtil.class);
