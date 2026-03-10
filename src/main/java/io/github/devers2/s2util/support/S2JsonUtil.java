@@ -718,6 +718,11 @@ public class S2JsonUtil {
             }
         }
 
+        // Number -> String 변환 추가
+        if (value instanceof Number num && targetType == String.class) {
+            return num.toString();
+        }
+
         return value;
     }
 
