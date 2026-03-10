@@ -1077,7 +1077,11 @@ public class S2JsonUtil {
 
             String numStr = json.substring(start, pos);
             try {
-                return isDouble ? Double.parseDouble(numStr) : Long.parseLong(numStr);
+                if (isDouble) {
+                    return Double.parseDouble(numStr);
+                } else {
+                    return Long.parseLong(numStr);
+                }
             } catch (NumberFormatException e) {
                 throw new IllegalArgumentException("Invalid number: " + numStr);
             }
