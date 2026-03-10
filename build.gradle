@@ -465,5 +465,5 @@ dependencies {
     testImplementation(libs.junit.jupiter.params)
     testRuntimeOnly(libs.junit.jupiter.engine)
     testRuntimeOnly(libs.junit.platform.launcher)
-    testCompileOnly(libs.s2.core)
+    testImplementation(libs.s2.core)
 }
