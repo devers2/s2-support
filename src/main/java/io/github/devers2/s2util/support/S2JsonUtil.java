@@ -145,7 +145,7 @@ public class S2JsonUtil {
      * }</pre>
      */
     public static String toJsonString(Object object) {
-        return toJsonString(object);
+        return toJsonString(object, (Feature[]) null);
     }
 
     /**
@@ -281,6 +281,7 @@ public class S2JsonUtil {
         Class<?> clazz = pojo.getClass();
         var optionalFields = S2Cache.getFields(clazz);
         if (optionalFields.isEmpty()) {
+            sb.append('}'); // 필드가 없어도 닫는 괄호 필요
             return;
         }
 
@@ -379,7 +380,7 @@ public class S2JsonUtil {
      * }</pre>
      */
     public static Map<String, Object> parseJson(String jsonString) {
-        return parseJson(jsonString);
+        return parseJson(jsonString, (Feature[]) null);
     }
 
     /**
@@ -473,7 +474,7 @@ public class S2JsonUtil {
      * }</pre>
      */
     public static <T> T parseJsonTo(String jsonString, Class<T> valueType) {
-        return parseJsonTo(jsonString, valueType);
+        return parseJsonTo(jsonString, valueType, (Feature[]) null);
     }
 
     /**
@@ -556,27 +557,101 @@ public class S2JsonUtil {
     }
 
     /**
-     * Map을 POJO로 변환 (MethodHandle 기반)
+     * Map을 POJO로 변환 (MethodHandle 기반) -> 리플렉션 최적화 (S2Cache 사용)
      */
+    @SuppressWarnings("unchecked")
     private static <T> T mapToPojo(Map<String, Object> map, Class<T> clazz) throws Exception {
-        T instance = clazz.getDeclaredConstructor().newInstance();
+        try {
+            T instance = clazz.getDeclaredConstructor().newInstance();
 
-        for (Map.Entry<String, Object> entry : map.entrySet()) {
-            String fieldName = entry.getKey();
-            Object value = entry.getValue();
-
-            try {
-                var field = clazz.getDeclaredField(fieldName);
-                field.setAccessible(true);
-                Class<?> fieldType = field.getType();
-                Object convertedValue = convertValue(value, fieldType);
-                field.set(instance, convertedValue);
-            } catch (Throwable e) {
-                logger.debug("필드 설정 실패: {}.{}", clazz.getName(), fieldName);
+            var optionalFields = S2Cache.getFields(clazz);
+            if (optionalFields.isEmpty()) {
+                return instance;
             }
-        }
 
-        return instance;
+            var fields = optionalFields.get();
+            for (var field : fields) {
+                // static, transient 필드는 제외
+                if (java.lang.reflect.Modifier.isStatic(field.getModifiers()) ||
+                        java.lang.reflect.Modifier.isTransient(field.getModifiers())) {
+                    continue;
+                }
+
+                String fieldName = field.getName();
+
+                // Map에 해당 필드 키가 존재하는지 확인 (null 값도 허용하려면 containsKey 체크)
+                if (!map.containsKey(fieldName)) {
+                    continue;
+                }
+
+                Object value = map.get(fieldName);
+
+                try {
+                    field.setAccessible(true);
+                    Class<?> fieldType = field.getType();
+
+                    // 중첩 POJO 처리: 필드 타입이 사용자 정의 클래스이고 JSON 값이 Map인 경우
+                    if (value instanceof Map && isPojoType(fieldType)) {
+                        Object nestedPojo = mapToPojo((Map<String, Object>) value, fieldType);
+                        field.set(instance, nestedPojo);
+                        continue;
+                    }
+
+                    // List 내부 중첩 POJO 처리: 제네릭 타입 정보 활용
+                    if (value instanceof List && List.class.isAssignableFrom(fieldType)) {
+                        List<Object> rawList = (List<Object>) value;
+                        java.lang.reflect.Type genericType = field.getGenericType();
+                        if (genericType instanceof java.lang.reflect.ParameterizedType pt) {
+                            java.lang.reflect.Type[] typeArgs = pt.getActualTypeArguments();
+                            if (typeArgs.length == 1 && typeArgs[0] instanceof Class<?> itemClass) {
+                                if (isPojoType(itemClass)) {
+                                    List<Object> convertedList = new ArrayList<>();
+                                    for (Object item : rawList) {
+                                        if (item instanceof Map) {
+                                            convertedList.add(mapToPojo((Map<String, Object>) item, itemClass));
+                                        } else {
+                                            convertedList.add(item);
+                                        }
+                                    }
+                                    field.set(instance, convertedList);
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+
+                    Object convertedValue = convertValue(value, fieldType);
+                    field.set(instance, convertedValue);
+                } catch (Throwable e) {
+                    logger.debug("필드 설정 실패: {}.{}", clazz.getName(), fieldName);
+                }
+            }
+
+            return instance;
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            // 생성자에서 발생한 예외를 언랩하여 원인 예외를 던짐
+            Throwable cause = e.getTargetException();
+            logger.error("POJO 생성 중 예외 발생: {} - {}", clazz.getName(), cause.getMessage(), cause);
+            throw (Exception) cause;
+        } catch (Exception e) {
+            logger.error("POJO 변환 실패: {} - {}", clazz.getName(), e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    /**
+     * 주어진 클래스가 사용자 정의 POJO인지 판단
+     * (기본 타입, Wrapper, String, Collection, Map, 날짜, UUID 등은 POJO가 아님)
+     */
+    private static boolean isPojoType(Class<?> clazz) {
+        return !clazz.isPrimitive()
+                && !clazz.isEnum()
+                && !clazz.isArray()
+                && !clazz.getName().startsWith("java.")
+                && !clazz.getName().startsWith("javax.")
+                && !clazz.getName().startsWith("jakarta.")
+                && !Map.class.isAssignableFrom(clazz)
+                && !Collection.class.isAssignableFrom(clazz);
     }
 
     /**
@@ -587,7 +662,7 @@ public class S2JsonUtil {
             return value;
         }
 
-        // String -> Number
+        // String -> 다양한 타입 변환
         if (value instanceof String str) {
             if (targetType == int.class || targetType == Integer.class) {
                 return Integer.parseInt(str);
@@ -598,8 +673,29 @@ public class S2JsonUtil {
             if (targetType == double.class || targetType == Double.class) {
                 return Double.parseDouble(str);
             }
+            if (targetType == float.class || targetType == Float.class) {
+                return Float.parseFloat(str);
+            }
             if (targetType == boolean.class || targetType == Boolean.class) {
                 return Boolean.parseBoolean(str);
+            }
+            if (targetType == java.math.BigDecimal.class) {
+                return new java.math.BigDecimal(str);
+            }
+            if (targetType == java.math.BigInteger.class) {
+                return new java.math.BigInteger(str);
+            }
+            if (targetType == java.util.UUID.class) {
+                return java.util.UUID.fromString(str);
+            }
+            if (targetType == java.time.LocalDate.class) {
+                return java.time.LocalDate.parse(str);
+            }
+            if (targetType == java.time.LocalDateTime.class) {
+                return java.time.LocalDateTime.parse(str);
+            }
+            if (targetType == java.time.LocalTime.class) {
+                return java.time.LocalTime.parse(str);
             }
         }
 
@@ -613,6 +709,12 @@ public class S2JsonUtil {
             }
             if (targetType == double.class || targetType == Double.class) {
                 return num.doubleValue();
+            }
+            if (targetType == float.class || targetType == Float.class) {
+                return num.floatValue();
+            }
+            if (targetType == java.math.BigDecimal.class) {
+                return new java.math.BigDecimal(num.toString());
             }
         }
 
@@ -909,17 +1011,32 @@ public class S2JsonUtil {
             int start = pos;
             boolean isDouble = false;
 
-            // Leading +
+            // Leading + 또는 - (혼용 방지: 둘 중 하나만 허용)
             if (pos < json.length() && json.charAt(pos) == '+') {
                 if (!Feature.isEnabled(flags, Feature.ALLOW_LEADING_PLUS_SIGN_FOR_NUMBERS)) {
                     throw new IllegalArgumentException("Leading + not allowed");
                 }
                 pos++;
+            } else if (pos < json.length() && json.charAt(pos) == '-') {
+                pos++;
             }
 
-            // Leading -
-            if (pos < json.length() && json.charAt(pos) == '-') {
+            // Leading decimal point (예: .5)
+            if (pos < json.length() && json.charAt(pos) == '.') {
+                if (!Feature.isEnabled(flags, Feature.ALLOW_LEADING_DECIMAL_POINT_FOR_NUMBERS)) {
+                    throw new IllegalArgumentException("Leading decimal point not allowed");
+                }
+                isDouble = true;
                 pos++;
+                while (pos < json.length() && Character.isDigit(json.charAt(pos))) {
+                    pos++;
+                }
+                String numStr = json.substring(start, pos);
+                try {
+                    return Double.parseDouble(numStr);
+                } catch (NumberFormatException e) {
+                    throw new IllegalArgumentException("Invalid number: " + numStr);
+                }
             }
 
             // Leading zeros

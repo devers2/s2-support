@@ -18,7 +18,7 @@
  *
  * For more information, please see the LICENSE file in the root directory.
  */
-package io.github.devers2.s2util.file.impl;
+package io.github.devers2.s2util.file.impl.spring;
 
 import java.io.BufferedInputStream;
 import java.io.FilterInputStream;
@@ -26,15 +26,15 @@ import java.io.IOException;
 import java.io.InputStream;
 
 import org.apache.commons.pool2.impl.GenericObjectPool;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.integration.sftp.session.SftpSession;
 import org.springframework.stereotype.Component;
 
 import io.github.devers2.s2util.exception.S2RuntimeException;
 import io.github.devers2.s2util.file.FileManager;
-import io.github.devers2.s2util.support.S2FileUtil;
 import io.github.devers2.s2util.file.S2ResourceInputStream;
+import io.github.devers2.s2util.log.S2LogManager;
+import io.github.devers2.s2util.log.S2Logger;
+import io.github.devers2.s2util.support.S2FileUtil;
 
 /**
  * SFTP 파일 전송 서비스 파일 업로드, 다운로드, 삭제 및 디렉토리 생성 기능을 제공합니다.
@@ -42,7 +42,8 @@ import io.github.devers2.s2util.file.S2ResourceInputStream;
 @Component
 public class SpringSftpFileManagerImpl implements FileManager {
 
-    private static final Logger logger = LoggerFactory.getLogger(SpringSftpFileManagerImpl.class);
+    private static final S2Logger logger = S2LogManager.getLogger(SpringSftpFileManagerImpl.class);
+
     private final GenericObjectPool<SftpSession> sessionPool;
 
     public SpringSftpFileManagerImpl(GenericObjectPool<SftpSession> sessionPool) {

@@ -9,7 +9,7 @@ java = "21"
 jsr305 = "3.0.2"
 
 # S2Util Libraries
-s2-util = "1.1.5"
+s2-util = "1.1.6"
 
 # Dependencies
 aspectj = "1.9.25.1"
@@ -51,6 +51,7 @@ uuid-creator = { group = "com.github.f4b6a3", name = "uuid-creator", version.ref
 spring5-context = { group = "org.springframework", name = "spring-context", version.ref = "spring-framework-5" }
 spring6-context = { group = "org.springframework", name = "spring-context", version.ref = "spring-framework-6" }
 spring6-web = { group = "org.springframework", name = "spring-web", version.ref = "spring-framework-6" }
+spring-integration-sftp = { group = "org.springframework.integration", name = "spring-integration-sftp", version.ref = "spring-framework-6" }
 
 # Servlet (Legacy vs Modern)
 javax-servlet-api = { group = "javax.servlet", name = "javax.servlet-api", version.ref = "javax-servlet-api" }

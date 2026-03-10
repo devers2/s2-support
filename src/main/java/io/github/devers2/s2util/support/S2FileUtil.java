@@ -928,7 +928,7 @@ public class S2FileUtil {
                     fileSize = Files.copy(inputStream, targetFile, StandardCopyOption.REPLACE_EXISTING);
                 } else if (sourceStream instanceof Reader r) {
                     reader = (r instanceof BufferedReader br) ? br : new BufferedReader(r);
-                    try (var writer = Files.newBufferedWriter(targetFile)) {
+                    try (var writer = Files.newBufferedWriter(targetFile, StandardCharsets.UTF_8)) {
                         var buffer = new char[S2StreamUtil.getBufferSize()];
                         int charsRead;
                         while ((charsRead = reader.read(buffer)) != -1) {

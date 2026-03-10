@@ -139,10 +139,7 @@ ext {
     /*
      * 기본 제외 소스 목록 (항상 제외되는 파일들)
      */
-    excludedSources = [
-        'io/github/devers2/s2util/file/impl/SpringSftpConfig.java.txt',
-        'io/github/devers2/s2util/file/impl/SpringSftpFileManagerImpl.java.txt'
-    ] as Set
+    excludedSources = [] as Set
 
     /*
      * 빌드 완료 후 결과물을 테스트할 클래스 지정 (shadowJar 실행 후 testArtifact 태스크로 수행됨, 여러 개 지정 가능)
@@ -455,6 +452,7 @@ dependencies {
     compileOnly(libs.s2.core)
     compileOnly(libs.spring6.context) // Java 17 이상으로 개발하므로 Spring 6 및 Spring Boot 3 계열이 표준
     compileOnly(libs.spring6.web) // Java 17 이상으로 개발하므로 Spring 6 및 Spring Boot 3 계열이 표준
+    compileOnly(libs.spring.integration.sftp)
     compileOnly(libs.jakarta.servlet.api) // Java 17 이상으로 개발하므로 jakarta 가 표준
     compileOnly(libs.jakarta.servlet.jsp) // Java 17 이상으로 개발하므로 jakarta 가 표준
     compileOnly(libs.aspectj.weaver)
@@ -467,4 +465,5 @@ dependencies {
     testImplementation(libs.junit.jupiter.params)
     testRuntimeOnly(libs.junit.jupiter.engine)
     testRuntimeOnly(libs.junit.platform.launcher)
+    testCompileOnly(libs.s2.core)
 }

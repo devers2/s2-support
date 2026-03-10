@@ -136,7 +136,7 @@ public class S2RestApiUtil {
             MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
             if (params != null) {
                 for (Map.Entry<String, Object> param : params) {
-                    if (param != null) {
+                    if (param != null && param.getKey() != null && param.getValue() != null) {
                         body.add(param.getKey(), param.getValue());
                     }
                 }
@@ -149,7 +149,7 @@ public class S2RestApiUtil {
             UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(url);
             if (params != null) {
                 for (Map.Entry<String, Object> param : params) {
-                    if (param != null) {
+                    if (param != null && param.getKey() != null && param.getValue() != null) {
                         builder.queryParam(param.getKey(), param.getValue());
                     }
                 }

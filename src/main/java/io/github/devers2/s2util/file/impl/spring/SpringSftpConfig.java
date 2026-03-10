@@ -18,7 +18,7 @@
  *
  * For more information, please see the LICENSE file in the root directory.
  */
-package io.github.devers2.s2util.file.impl;
+package io.github.devers2.s2util.file.impl.spring;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -29,8 +29,6 @@ import org.apache.commons.pool2.impl.AbandonedConfig;
 import org.apache.commons.pool2.impl.DefaultPooledObject;
 import org.apache.commons.pool2.impl.GenericObjectPool;
 import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -38,9 +36,13 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.integration.sftp.session.DefaultSftpSessionFactory;
 import org.springframework.integration.sftp.session.SftpSession;
 
+import io.github.devers2.s2util.log.S2LogManager;
+import io.github.devers2.s2util.log.S2Logger;
+
 @Configuration
 public class SpringSftpConfig {
-    private static final Logger logger = LoggerFactory.getLogger(SpringSftpConfig.class);
+
+    private static final S2Logger logger = S2LogManager.getLogger(SpringSftpConfig.class);
 
     /* 유휴 객체 정비 주기 (초) */
     private static final int EVICTION_RUN_INTERVAL_SECONDS = 60;
@@ -78,6 +80,7 @@ public class SpringSftpConfig {
     @Value("${sftp.pool.min-idle:8}")
     private int minIdle;
 
+    @SuppressWarnings("null")
     @Bean
     public DefaultSftpSessionFactory sftpSessionFactory() throws IOException {
         // ssh 키 생성시에는 PEM 형식으로 할 것 !!!!!
