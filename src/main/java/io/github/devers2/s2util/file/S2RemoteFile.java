@@ -22,7 +22,9 @@ package io.github.devers2.s2util.file;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLConnection;
 
 import io.github.devers2.s2util.support.S2FileUtil;
 
@@ -50,8 +52,9 @@ public class S2RemoteFile implements Serializable {
 
     public S2RemoteFile(URL url) {
         if (url != null) {
+            URLConnection connection = null;
             try {
-                var connection = url.openConnection();
+                connection = url.openConnection();
                 var contentDisposition = connection.getHeaderField("Content-Disposition");
                 var fileName = "";
 
@@ -83,6 +86,13 @@ public class S2RemoteFile implements Serializable {
                 contentType = "";
                 size = 0;
                 lastModified = 0;
+            } finally {
+                // getHeaderField/getContentType 등을 호출하는 시점에 실제 HTTP 요청이 발생하므로,
+                // 응답 바디를 읽지 않고 메타데이터만 쓰고 버리는 이 코드에서는 명시적으로 끊어주지
+                // 않으면 커넥션이 keep-alive 풀에 반환되지 않고 계속 점유될 수 있다.
+                if (connection instanceof HttpURLConnection httpConnection) {
+                    httpConnection.disconnect();
+                }
             }
         }
     }

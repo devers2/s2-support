@@ -53,6 +53,28 @@ import java.util.Map;
  * - 캐시 크기가 작고, 쓰기(put) 빈도가 상대적으로 높은 경우
  * </p>
  *
+ * <p>
+ * <b>⚠️ 순회(iteration) 시 주의사항:</b><br>
+ * {@code get}/{@code put} 등 개별 메서드 호출은 자동으로 락이 걸리지만, {@code entrySet()},
+ * {@code keySet()}, {@code values()} 로 얻은 뷰를 for-each 나 {@code Iterator} 로 순회하는 동안은
+ * 그 순회 전체가 하나의 원자적 동작이 아니다. 다른 스레드가 동시에 {@code put}/{@code remove} 를
+ * 호출하면 {@code ConcurrentModificationException} 이 발생할 수 있으므로, 순회할 때는 반드시 그
+ * 맵 객체 자체를 대상으로 수동 동기화해야 한다:
+ *
+ * <pre>{@code
+ * Map<K, V> cache = S2LruMap.createSynchronizedLRUMap();
+ * synchronized (cache) {
+ *     for (Map.Entry<K, V> entry : cache.entrySet()) {
+ *         // ...
+ *     }
+ * }
+ * }</pre>
+ *
+ * 단순히 각 항목에 대해 처리만 하면 되는 경우라면, 수동 동기화가 필요 없는 {@link Map#forEach}
+ * 사용을 권장한다({@code Collections.synchronizedMap} 은 {@code forEach} 자체를 내부적으로
+ * 동기화해서 제공한다).
+ * </p>
+ *
  * @param <K> 키 타입
  * @param <V> 값 타입
  *

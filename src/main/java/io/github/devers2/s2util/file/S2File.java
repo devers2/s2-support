@@ -40,7 +40,12 @@ public class S2File implements Serializable {
     private static final long serialVersionUID = -2153812958442984593L;
 
     private boolean isFile = false;
-    private Path file;
+    // java.nio.file.Path 구현체(UnixPath 등)는 Serializable 이 아니므로, 이 필드가 채워진 채로
+    // 이 클래스를 직렬화하면 NotSerializableException 이 발생한다. transient 로 표시해 직렬화
+    // 시에는 제외하고, 나머지 파생 필드(directoryPath/baseName/extension/size)들로 메타데이터를
+    // 보존한다 - 어차피 Path 는 로컬 파일시스템에 종속적이라 원격/역직렬화 환경에서 그대로 복원해도
+    // 의미가 없다.
+    private transient Path file;
 
     /** 디렉토리 경로 */
     private String directoryPath = "";
@@ -67,7 +72,9 @@ public class S2File implements Serializable {
                 this.isFile = true;
             }
 
-            this.directoryPath = this.file.getParent() != null ? this.file.getParent().toString() : null; // 디렉토리 경로 추출
+            // 다른 String 필드들과 마찬가지로 부모 디렉토리가 없을 때도 null 대신 "" 를 사용해,
+            // 호출 측이 null 체크 없이 .isBlank() 등을 호출해도 안전하도록 한다.
+            this.directoryPath = this.file.getParent() != null ? this.file.getParent().toString() : ""; // 디렉토리 경로 추출
 
             this.baseName = S2FileUtil.getBaseName(this.file); // 확장자 제외 파일명
 
