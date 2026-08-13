@@ -70,7 +70,7 @@ This library is provided under the **Apache License 2.0**. You are free to use, 
 ```groovy
 dependencies {
     // Essential runtime dependencies for optional functionalities
-    implementation 'io.github.devers2:s2-core:1.1.6'
+    implementation 'io.github.devers2:s2-core:1.1.7'
     implementation 'org.springframework:spring-context:6.1.1'
     implementation 'org.springframework:spring-web:6.1.1'
     implementation 'org.springframework.integration:spring-integration-sftp:6.1.1'
