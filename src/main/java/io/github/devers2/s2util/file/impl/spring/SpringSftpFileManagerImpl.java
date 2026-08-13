@@ -96,6 +96,11 @@ public class SpringSftpFileManagerImpl implements FileManager {
                         logger.debug("Ignored runtime exception while closing SFTP session", ignore);
                     }
                 }
+            } catch (InterruptedException e) {
+                // 인터럽트는 재시도 대상이 아니다. 상태를 복구하고 즉시 전파해서 호출자(예: 종료 중인
+                // ExecutorService)가 인터럽트를 인지할 수 있게 한다 - 삼켜서 재시도하면 안 된다.
+                Thread.currentThread().interrupt();
+                throw e;
             } catch (java.util.NoSuchElementException | IllegalStateException e) {
                 lastException = e;
                 attempts++;
@@ -226,15 +231,18 @@ public class SpringSftpFileManagerImpl implements FileManager {
         String remoteFileFullPath = S2FileUtil.joinPaths(savePath, saveName);
         SftpSession session = null;
         try {
-            session = sessionPool.borrowObject();
+            // writeFile/readFile 과 동일하게 재시도/eviction 이 포함된 안전한 대여를 사용한다
+            // (직접 sessionPool.borrowObject() 를 쓰면 풀 고갈 시 재시도 없이 바로 실패한다).
+            session = borrowSessionSafely();
             if (session.exists(remoteFileFullPath)) {
                 session.remove(remoteFileFullPath);
                 logger.debug("File deleted successfully: {}", remoteFileFullPath);
             } else {
                 logger.warn("File not found for deletion: {}", remoteFileFullPath);
             }
-        } catch (IOException | java.util.NoSuchElementException | IllegalStateException e) {
-            logger.error("Failed to delete file: {}", remoteFileFullPath, e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.error("Failed to delete file (interrupted): {}", remoteFileFullPath, e);
             throw new S2RuntimeException("Failed to delete file: " + e);
         } catch (Exception e) {
             logger.error("Failed to delete file: {}", remoteFileFullPath, e);

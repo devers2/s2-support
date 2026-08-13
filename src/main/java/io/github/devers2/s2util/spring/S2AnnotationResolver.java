@@ -200,14 +200,20 @@ public final class S2AnnotationResolver {
             }
 
             var result = new ArrayList<Class<?>>();
-            for (var ref : refs) {
-                var clazz = ref.get();
-                if (clazz == null) {
-                    continue;
-                }
-                var classPackage = clazz.getPackage();
-                if (classPackage != null && isPackageIncluded(classPackage.getName(), scopePackages)) {
-                    result.add(clazz);
+            // refs 는 Collections.synchronizedList 로 감싸져 있는데, 이 래퍼는 개별 메서드 호출만
+            // 스레드 세이프하고 순회(iteration)는 호출자가 그 리스트 객체에 대해 직접 동기화해야
+            // 한다는 게 명세된 계약이다. 동기화 없이 순회하면 동시에 performScan() 이 같은
+            // 버킷(refs)에 항목을 추가할 때 ConcurrentModificationException 이 발생할 수 있다.
+            synchronized (refs) {
+                for (var ref : refs) {
+                    var clazz = ref.get();
+                    if (clazz == null) {
+                        continue;
+                    }
+                    var classPackage = clazz.getPackage();
+                    if (classPackage != null && isPackageIncluded(classPackage.getName(), scopePackages)) {
+                        result.add(clazz);
+                    }
                 }
             }
             return result;

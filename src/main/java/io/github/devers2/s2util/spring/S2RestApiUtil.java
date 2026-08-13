@@ -72,9 +72,10 @@ public class S2RestApiUtil {
      * 기본 타임아웃(30,000ms)을 사용하며, HTTP 메서드와 매개변수를 받아 요청을 처리한다.
      *
      * @param url    호출할 REST API의 URL. (필수)
-     * @param method 사용할 HTTP 메서드 (예: {@link HttpMethod#POST}, {@link HttpMethod#GET}). (필수)
+     * @param method 사용할 HTTP 메서드. {@link HttpMethod#POST}, {@link HttpMethod#GET}만 지원한다. (필수)
      * @param params 요청에 포함할 매개변수로, 키-값 쌍의 배열. (선택)
-     * @return API 호출 결과로 반환된 문자열 응답. 응답이 없거나 오류 발생 시 null을 반환.
+     * @return API 호출 결과로 반환된 문자열 응답. 응답 본문이 없으면 null을 반환.
+     * @throws IllegalArgumentException POST/GET 이외의 HTTP 메서드를 전달한 경우
      *
      *         <pre>{@code
      * String result = S2RestApiUtil.callApi("request.api", HttpMethod.POST,
@@ -95,10 +96,11 @@ public class S2RestApiUtil {
      * 사용자 지정 타임아웃을 설정할 수 있으며, HTTP 메서드와 매개변수를 받아 요청을 처리한다.
      *
      * @param url     호출할 REST API의 URL. (필수)
-     * @param method  사용할 HTTP 메서드 (예: {@link HttpMethod#POST}, {@link HttpMethod#GET}). (필수)
+     * @param method  사용할 HTTP 메서드. {@link HttpMethod#POST}, {@link HttpMethod#GET}만 지원한다. (필수)
      * @param timeout 연결 및 읽기 타임아웃(밀리초 단위). null인 경우 기본값 30,000ms 사용. (선택)
      * @param params  요청에 포함할 매개변수로, 키-값 쌍의 배열. (선택)
-     * @return API 호출 결과로 반환된 문자열 응답. 응답이 없거나 오류 발생 시 null을 반환.
+     * @return API 호출 결과로 반환된 문자열 응답. 응답 본문이 없으면 null을 반환.
+     * @throws IllegalArgumentException POST/GET 이외의 HTTP 메서드를 전달한 경우
      * @apiNote
      *
      *          <pre>{@code
@@ -159,6 +161,10 @@ public class S2RestApiUtil {
             java.net.URI uri = builder.build().encode().toUri();
             HttpEntity<Void> requestEntity = new HttpEntity<>(headers);
             responseEntity = restTemplate.exchange(uri, HttpMethod.GET, requestEntity, String.class);
+        } else {
+            // POST/GET 외 메서드는 지원하지 않는다. 조용히 null을 반환하면 "서버 응답이 없어서 null"인지
+            // "애초에 지원 안 하는 메서드라 아무것도 안 보냈는지" 구분이 안 돼 디버깅이 어려워지므로 즉시 실패시킨다.
+            throw new IllegalArgumentException("Unsupported HTTP method: " + method + " (only POST and GET are supported)");
         }
 
         if (responseEntity != null && responseEntity.getBody() != null) {

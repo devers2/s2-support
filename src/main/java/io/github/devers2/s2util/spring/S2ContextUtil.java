@@ -84,38 +84,32 @@ public final class S2ContextUtil {
             return null;
         }
 
-        Object resultValue = null;
+        // 우선순위를 지키기 위해 2-pass 로 검색한다: 파라미터별로 "이름 일치 -> 딥서치"를 번갈아
+        // 처리하면 뒤쪽 파라미터의 이름 일치보다 앞쪽 파라미터의 딥서치가 먼저 걸려버릴 수 있다.
+        // (예: method(Foo foo, String userId) 에서 "userId" 검색 시, foo 내부의 userId 필드가
+        // 실제 userId 파라미터보다 먼저 반환되면 안 된다.)
 
+        // 1. 파라미터 이름 자체가 찾으려는 이름과 같은 아규먼트를 전체 파라미터에서 먼저 찾는다 (최우선)
         for (var i = 0; i < parameterNames.length; i++) {
-            var paramName = parameterNames[i];
-            var argument = arguments[i];
-
-            // 1. 파라미터 이름 자체가 찾으려는 이름과 같은 경우 (최우선)
-            // 예: method(String userId) -> "userId" 검색 시 바로 반환
-            if (schParameterName.equals(paramName)) {
-                if (S2Util.isNotEmpty(argument)) {
-                    return argument;
-                }
+            if (schParameterName.equals(parameterNames[i]) && S2Util.isNotEmpty(arguments[i])) {
+                return arguments[i];
             }
+        }
 
-            // 2. 객체 내부 필드 검색 (Deep Search)
-            // argument가 null이 아니고, voClass 제약이 없거나 해당 타입인 경우에만 검색
+        // 2. 이름 일치가 없으면, 객체 내부 필드 검색 (Deep Search)
+        // argument가 null이 아니고, voClass 제약이 없거나 해당 타입인 경우에만 검색
+        for (var i = 0; i < parameterNames.length; i++) {
+            var argument = arguments[i];
             if (argument != null && (voClass == null || voClass.isInstance(argument))) {
-
-                // [성능 개선]
-                // 기존에는 getValueAll로 모든 필드를 뒤졌지만,
-                // 이제는 캐싱된 MethodHandle을 사용하는 getValue로 핀포인트 조회합니다.
+                // 캐싱된 MethodHandle을 사용하는 getValue로 핀포인트 조회
                 var deepValue = S2Util.getValue(argument, schParameterName);
-
                 if (S2Util.isNotEmpty(deepValue)) {
-                    resultValue = deepValue;
-                    // 값을 찾았으면 루프 종료 (우선순위에 따라 첫 번째 발견 값 반환)
-                    break;
+                    return deepValue;
                 }
             }
         }
 
-        return resultValue;
+        return null;
     }
 
 }
