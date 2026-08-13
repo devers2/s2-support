@@ -52,6 +52,33 @@ public class S2ImageUtil {
     private static final S2Logger logger = S2LogManager.getLogger(S2ImageUtil.class);
 
     /**
+     * sourceFile 로부터 변경 전 경로 정보를 계산한다.
+     * convertImage/imageResize/convertImageExtension 이 공통으로 사용한다.
+     */
+    private record BeforeImageInfo(String fullPath, Path parent, String fileNameString, String extension) {
+    }
+
+    private static BeforeImageInfo resolveBeforeImageInfo(Path sourceFile) {
+        var fullPath = S2StringUtil.replaceChars(sourceFile.toString(), "/", '\\');
+        var parent = sourceFile.getParent();
+        var fileNameString = sourceFile.getFileName().toString();
+        var extension = S2FileUtil.getExtension(sourceFile).toLowerCase();
+        return new BeforeImageInfo(fullPath, parent, fileNameString, extension);
+    }
+
+    /**
+     * newFilePath/newFileName 이 없으면 원본 경로/파일명을 사용해 변경 후 전체 경로를 계산한다.
+     * convertImage/imageResize 가 동일하게 사용하는 로직이다.
+     */
+    private static String buildAfterFileFullPath(Path beforeFilePath, String beforeFileNameString, String newFilePath, String newFileName) {
+        return S2StringUtil.replaceChars(
+                (newFilePath != null && !newFilePath.isBlank() ? newFilePath : beforeFilePath.toString()) + "/" + (newFileName != null && !newFileName.isBlank() ? newFileName : beforeFileNameString),
+                "/",
+                '\\'
+        );
+    }
+
+    /**
      * 이미지를 변경한다.(속도 개선을 위해 이미지 리사이즈와 포맷 변경을 동시에 처리)
      *
      * @param sourceFile           기존 파일
@@ -72,17 +99,11 @@ public class S2ImageUtil {
         String resultExtension = "";
 
         if (sourceFile != null && Files.exists(sourceFile) && Files.isRegularFile(sourceFile)) {
-            var beforeFileFullPath = S2StringUtil.replaceChars(sourceFile.toString(), "/", '\\');
-            var beforeFilePath = sourceFile.getParent();
-            var beforeFileName = sourceFile.getFileName();
-            var beforeFileNameString = beforeFileName.toString();
-            var beforeFileExtension = S2FileUtil.getExtension(sourceFile).toLowerCase();
+            var before = resolveBeforeImageInfo(sourceFile);
+            var beforeFileFullPath = before.fullPath();
+            var beforeFileExtension = before.extension();
 
-            var afterFileFullPath = S2StringUtil.replaceChars(
-                    (newFilePath != null && !newFilePath.isBlank() ? newFilePath : beforeFilePath.toString()) + "/" + (newFileName != null && !newFileName.isBlank() ? newFileName : beforeFileNameString),
-                    "/",
-                    '\\'
-            );
+            var afterFileFullPath = buildAfterFileFullPath(before.parent(), before.fileNameString(), newFilePath, newFileName);
             resultPath = Paths.get(afterFileFullPath);
 
             try (var newFileInputStream = Files.newInputStream(sourceFile);
@@ -122,6 +143,9 @@ public class S2ImageUtil {
 
                     try (var resizedInputStream = new ByteArrayInputStream(resizedOutputStream.toByteArray())) {
                         var beforeImage = ImageIO.read(resizedInputStream);
+                        if (beforeImage == null) {
+                            throw new IOException("이미지를 읽을 수 없습니다 (지원하지 않는 형식이거나 손상된 파일)");
+                        }
                         var afterImage = new BufferedImage(beforeImage.getWidth(), beforeImage.getHeight(), BufferedImage.TYPE_INT_RGB);
 
                         afterImage.createGraphics().drawImage(beforeImage, 0, 0, Color.white, null);
@@ -162,24 +186,19 @@ public class S2ImageUtil {
         String resultOriginalName = "";
 
         if (sourceFile != null && Files.exists(sourceFile) && Files.isRegularFile(sourceFile)) {
-            var beforeFileFullPath = S2StringUtil.replaceChars(sourceFile.toString(), "/", '\\');
-            var beforeFilePath = sourceFile.getParent();
-            var beforeFileName = sourceFile.getFileName();
-            var beforeFileNameString = beforeFileName.toString();
-            var beforeFileExtension = S2FileUtil.getExtension(sourceFile).toLowerCase();
+            var before = resolveBeforeImageInfo(sourceFile);
+            var beforeFileFullPath = before.fullPath();
+            var beforeFileNameString = before.fileNameString();
+            var beforeFileExtension = before.extension();
 
-            var afterFileFullPath = S2StringUtil.replaceChars(
-                    (newFilePath != null && !newFilePath.isBlank() ? newFilePath : beforeFilePath.toString()) + "/" + (newFileName != null && !newFileName.isBlank() ? newFileName : beforeFileNameString),
-                    "/",
-                    '\\'
-            );
+            var afterFileFullPath = buildAfterFileFullPath(before.parent(), before.fileNameString(), newFilePath, newFileName);
             resultFile = Paths.get(afterFileFullPath);
 
             try (var newFileInputStream = Files.newInputStream(sourceFile)) {
                 var newImage = imageResize(newFileInputStream, maxWidth, maxHeight, isFixedRate);
 
                 var resultDirectory = resultFile.getParent();
-                if (!Files.exists(resultDirectory)) {
+                if (!Files.isDirectory(resultDirectory)) {
                     Files.createDirectories(resultDirectory);
                 }
 
@@ -213,6 +232,9 @@ public class S2ImageUtil {
 
         try {
             var inputImage = ImageIO.read(imageInputStream);
+            if (inputImage == null) {
+                throw new IOException("이미지를 읽을 수 없습니다 (지원하지 않는 형식이거나 손상된 파일)");
+            }
 
             int beforeWidth = inputImage.getWidth();
             int beforeHeight = inputImage.getHeight();
@@ -279,9 +301,9 @@ public class S2ImageUtil {
         String resultExtension = "";
 
         if (sourceFile != null && Files.exists(sourceFile) && Files.isRegularFile(sourceFile)) {
-            var beforeFileFullPath = S2StringUtil.replaceChars(sourceFile.toString(), "/", '\\');
-            var beforeFilePath = sourceFile.getParent();
-            var beforeFileExtension = S2FileUtil.getExtension(sourceFile).toLowerCase();
+            var before = resolveBeforeImageInfo(sourceFile);
+            var beforeFileFullPath = before.fullPath();
+            var beforeFileExtension = before.extension();
 
             var afterFileExtension = newFileExtension != null && !newFileExtension.isBlank() ? newFileExtension.toLowerCase() : "";
             var afterFileName = "";
@@ -292,7 +314,7 @@ public class S2ImageUtil {
                 afterFileName = (beforeFileExtension != null && !beforeFileExtension.isBlank() ? S2FileUtil.getBaseName(sourceFile) : sourceFile.getFileName().toString()) + (afterFileExtension != null && !afterFileExtension.isBlank() ? "." + afterFileExtension : "");
             }
 
-            var afterFileFullPath = S2StringUtil.replaceChars((newFilePath != null && !newFilePath.isBlank() ? newFilePath : beforeFilePath.toString()) + "/" + afterFileName, "/", '\\');
+            var afterFileFullPath = S2StringUtil.replaceChars((newFilePath != null && !newFilePath.isBlank() ? newFilePath : before.parent().toString()) + "/" + afterFileName, "/", '\\');
 
             resultFile = Paths.get(afterFileFullPath);
 
@@ -316,6 +338,9 @@ public class S2ImageUtil {
                     Files.createDirectories(resultFile.getParent());
 
                     var beforeImage = ImageIO.read(sourceFile.toFile());
+                    if (beforeImage == null) {
+                        throw new IOException("이미지를 읽을 수 없습니다 (지원하지 않는 형식이거나 손상된 파일): " + sourceFile);
+                    }
                     var afterImage = new BufferedImage(beforeImage.getWidth(), beforeImage.getHeight(), BufferedImage.TYPE_INT_RGB);
 
                     afterImage.createGraphics().drawImage(beforeImage, 0, 0, Color.white, null);

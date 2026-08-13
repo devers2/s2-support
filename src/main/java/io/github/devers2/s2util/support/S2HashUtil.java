@@ -106,8 +106,22 @@ public class S2HashUtil {
      *          </dl>
      */
     public static boolean verify(String text, String storedHash) throws NoSuchAlgorithmException, InvalidKeySpecException {
-        // 저장된 해시값 디코딩
-        var combined = Base64.getDecoder().decode(storedHash);
+        if (storedHash == null || storedHash.isBlank()) {
+            return false;
+        }
+
+        // 저장된 해시값 디코딩 (형식이 잘못된 Base64 는 불일치로 처리)
+        byte[] combined;
+        try {
+            combined = Base64.getDecoder().decode(storedHash);
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+
+        // Salt 를 분리할 수 없을 만큼 짧은 값도 불일치로 처리 (NegativeArraySizeException 방지)
+        if (combined.length <= SALT_LENGTH) {
+            return false;
+        }
 
         // 솔트와 해시 분리
         var salt = new byte[SALT_LENGTH];
@@ -182,16 +196,7 @@ public class S2HashUtil {
      *          </dl>
      */
     public static String generateSHA512(Path input) {
-        if (input == null || !Files.exists(input) || !Files.isRegularFile(input) || !Files.isReadable(input)) {
-            return "";
-        }
-
-        try (InputStream inputStream = S2StreamUtil.getBufferedInputStream(Files.newInputStream(input))) {
-            return generateHashFromStream(HASH_ALGORITHM_SHA512, inputStream, S2StreamUtil.getBufferSize(Files.size(input)));
-        } catch (IOException | NoSuchAlgorithmException e) {
-            logger.error("SHA-512 Hash 오류 발생 [Path]: {}", input, e);
-            throw new S2RuntimeException("SHA-512 Hash 오류 발생 [Path]");
-        }
+        return generateHash(HASH_ALGORITHM_SHA512, input);
     }
 
     /**
@@ -206,7 +211,7 @@ public class S2HashUtil {
      *          </dl>
      */
     public static String generateSHA512(InputStream input) {
-        return generateSHA512(input, false);
+        return generateHash(HASH_ALGORITHM_SHA512, input, false);
     }
 
     /**
@@ -221,20 +226,7 @@ public class S2HashUtil {
      *          </dl>
      */
     public static String generateSHA512(InputStream input, boolean shouldCloseStream) {
-        if (input == null) {
-            return "";
-        }
-
-        try {
-            return generateHashFromStream(HASH_ALGORITHM_SHA512, input, null);
-        } catch (IOException | NoSuchAlgorithmException e) {
-            logger.error("SHA-512 Hash 오류 발생 [InputStream]", e);
-            throw new S2RuntimeException("SHA-512 Hash 오류 발생 [InputStream]");
-        } finally {
-            if (shouldCloseStream) {
-                S2StreamUtil.closeStream(input);
-            }
-        }
+        return generateHash(HASH_ALGORITHM_SHA512, input, shouldCloseStream);
     }
 
     /**
@@ -248,16 +240,7 @@ public class S2HashUtil {
      *          </dl>
      */
     public static String generateSHA512(String input) {
-        if (input == null || input.isBlank()) {
-            return "";
-        }
-
-        try (ByteArrayInputStream inputStream = new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8))) {
-            return generateHashFromStream(HASH_ALGORITHM_SHA512, inputStream, null);
-        } catch (IOException | NoSuchAlgorithmException e) {
-            logger.error("SHA-512 Hash 오류 발생 [문자열 변환]", e);
-            throw new S2RuntimeException("SHA-512 Hash 오류 발생 [문자열 변환]");
-        }
+        return generateHash(HASH_ALGORITHM_SHA512, input);
     }
 
     /**
@@ -271,16 +254,7 @@ public class S2HashUtil {
      *          </dl>
      */
     public static String generateSHA512(byte[] input) {
-        if (input == null) {
-            return "";
-        }
-
-        try (ByteArrayInputStream inputStream = new ByteArrayInputStream(input)) {
-            return generateHashFromStream(HASH_ALGORITHM_SHA512, inputStream, null);
-        } catch (IOException | NoSuchAlgorithmException e) {
-            logger.error("SHA-512 Hash 오류 발생 [바이트 배열]", e);
-            throw new S2RuntimeException("SHA-512 Hash 오류 발생 [바이트 배열]");
-        }
+        return generateHash(HASH_ALGORITHM_SHA512, input);
     }
 
     /**
@@ -294,16 +268,7 @@ public class S2HashUtil {
      *          </dl>
      */
     public static String generateSHA512To256(Path input) {
-        if (input == null || !Files.exists(input) || !Files.isRegularFile(input) || !Files.isReadable(input)) {
-            return "";
-        }
-
-        try (InputStream inputStream = S2StreamUtil.getBufferedInputStream(Files.newInputStream(input))) {
-            return generateHashFromStream(HASH_ALGORITHM_SHA512_256, inputStream, S2StreamUtil.getBufferSize(Files.size(input)));
-        } catch (IOException | NoSuchAlgorithmException e) {
-            logger.error("SHA-512/256 Hash 오류 발생 [Path]: {}", input, e);
-            throw new S2RuntimeException("SHA-512/256 Hash 오류 발생 [Path]");
-        }
+        return generateHash(HASH_ALGORITHM_SHA512_256, input);
     }
 
     /**
@@ -318,7 +283,7 @@ public class S2HashUtil {
      *          </dl>
      */
     public static String generateSHA512To256(InputStream input) {
-        return generateSHA512(input, false);
+        return generateHash(HASH_ALGORITHM_SHA512_256, input, false);
     }
 
     /**
@@ -333,20 +298,7 @@ public class S2HashUtil {
      *          </dl>
      */
     public static String generateSHA512To256(InputStream input, boolean shouldCloseStream) {
-        if (input == null) {
-            return "";
-        }
-
-        try {
-            return generateHashFromStream(HASH_ALGORITHM_SHA512_256, input, null);
-        } catch (IOException | NoSuchAlgorithmException e) {
-            logger.error("SHA-512/256 Hash 오류 발생 [InputStream]", e);
-            throw new S2RuntimeException("SHA-512/256 Hash 오류 발생 [InputStream]");
-        } finally {
-            if (shouldCloseStream) {
-                S2StreamUtil.closeStream(input);
-            }
-        }
+        return generateHash(HASH_ALGORITHM_SHA512_256, input, shouldCloseStream);
     }
 
     /**
@@ -360,16 +312,7 @@ public class S2HashUtil {
      *          </dl>
      */
     public static String generateSHA512To256(String input) {
-        if (input == null || input.isBlank()) {
-            return "";
-        }
-
-        try (ByteArrayInputStream inputStream = new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8))) {
-            return generateHashFromStream(HASH_ALGORITHM_SHA512_256, inputStream, null);
-        } catch (IOException | NoSuchAlgorithmException e) {
-            logger.error("SHA-512/256 Hash 오류 발생 [문자열 변환]", e);
-            throw new S2RuntimeException("SHA-512/256 Hash 오류 발생 [문자열 변환]");
-        }
+        return generateHash(HASH_ALGORITHM_SHA512_256, input);
     }
 
     /**
@@ -383,16 +326,7 @@ public class S2HashUtil {
      *          </dl>
      */
     public static String generateSHA512To256(byte[] input) {
-        if (input == null) {
-            return "";
-        }
-
-        try (ByteArrayInputStream inputStream = new ByteArrayInputStream(input)) {
-            return generateHashFromStream(HASH_ALGORITHM_SHA512_256, inputStream, null);
-        } catch (IOException | NoSuchAlgorithmException e) {
-            logger.error("SHA-512/256 Hash 오류 발생 [바이트 배열]", e);
-            throw new S2RuntimeException("SHA-512/256 Hash 오류 발생 [바이트 배열]");
-        }
+        return generateHash(HASH_ALGORITHM_SHA512_256, input);
     }
 
     /**
@@ -406,16 +340,7 @@ public class S2HashUtil {
      *          </dl>
      */
     public static String generateSHA256(Path input) {
-        if (input == null || !Files.exists(input) || !Files.isRegularFile(input) || !Files.isReadable(input)) {
-            return "";
-        }
-
-        try (InputStream inputStream = S2StreamUtil.getBufferedInputStream(Files.newInputStream(input))) {
-            return generateHashFromStream(HASH_ALGORITHM_SHA256, inputStream, S2StreamUtil.getBufferSize(Files.size(input)));
-        } catch (IOException | NoSuchAlgorithmException e) {
-            logger.error("SHA-256 Hash 오류 발생 [Path]: {}", input, e);
-            throw new S2RuntimeException("SHA-256 Hash 오류 발생 [Path]");
-        }
+        return generateHash(HASH_ALGORITHM_SHA256, input);
     }
 
     /**
@@ -430,7 +355,7 @@ public class S2HashUtil {
      *          </dl>
      */
     public static String generateSHA256(InputStream input) {
-        return generateSHA256(input, false);
+        return generateHash(HASH_ALGORITHM_SHA256, input, false);
     }
 
     /**
@@ -445,20 +370,7 @@ public class S2HashUtil {
      *          </dl>
      */
     public static String generateSHA256(InputStream input, boolean shouldCloseStream) {
-        if (input == null) {
-            return "";
-        }
-
-        try {
-            return generateHashFromStream(HASH_ALGORITHM_SHA256, input, null);
-        } catch (IOException | NoSuchAlgorithmException e) {
-            logger.error("SHA-256 Hash 오류 발생 [InputStream]", e);
-            throw new S2RuntimeException("SHA-256 Hash 오류 발생 [InputStream]");
-        } finally {
-            if (shouldCloseStream) {
-                S2StreamUtil.closeStream(input);
-            }
-        }
+        return generateHash(HASH_ALGORITHM_SHA256, input, shouldCloseStream);
     }
 
     /**
@@ -472,16 +384,7 @@ public class S2HashUtil {
      *          </dl>
      */
     public static String generateSHA256(String input) {
-        if (input == null || input.isBlank()) {
-            return "";
-        }
-
-        try (ByteArrayInputStream inputStream = new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8))) {
-            return generateHashFromStream(HASH_ALGORITHM_SHA256, inputStream, null);
-        } catch (IOException | NoSuchAlgorithmException e) {
-            logger.error("SHA-256 Hash 오류 발생 [문자열 변환]", e);
-            throw new S2RuntimeException("SHA-256 Hash 오류 발생 [문자열 변환]");
-        }
+        return generateHash(HASH_ALGORITHM_SHA256, input);
     }
 
     /**
@@ -495,15 +398,78 @@ public class S2HashUtil {
      *          </dl>
      */
     public static String generateSHA256(byte[] input) {
+        return generateHash(HASH_ALGORITHM_SHA256, input);
+    }
+
+    /**
+     * 지정된 알고리즘으로 파일을 해시로 변환하는 공통 구현.
+     * generateSHA256/generateSHA512/generateSHA512To256(Path) 가 공유한다.
+     */
+    private static String generateHash(String algorithm, Path input) {
+        if (input == null || !Files.exists(input) || !Files.isRegularFile(input) || !Files.isReadable(input)) {
+            return "";
+        }
+
+        try (InputStream inputStream = S2StreamUtil.getBufferedInputStream(Files.newInputStream(input))) {
+            return generateHashFromStream(algorithm, inputStream, S2StreamUtil.getBufferSize(Files.size(input)));
+        } catch (IOException | NoSuchAlgorithmException e) {
+            logger.error("{} Hash 오류 발생 [Path]: {}", algorithm, input, e);
+            throw new S2RuntimeException(algorithm + " Hash 오류 발생 [Path]");
+        }
+    }
+
+    /**
+     * 지정된 알고리즘으로 InputStream 을 해시로 변환하는 공통 구현.
+     * generateSHA256/generateSHA512/generateSHA512To256(InputStream, boolean) 이 공유한다.
+     */
+    private static String generateHash(String algorithm, InputStream input, boolean shouldCloseStream) {
+        if (input == null) {
+            return "";
+        }
+
+        try {
+            return generateHashFromStream(algorithm, input, null);
+        } catch (IOException | NoSuchAlgorithmException e) {
+            logger.error("{} Hash 오류 발생 [InputStream]", algorithm, e);
+            throw new S2RuntimeException(algorithm + " Hash 오류 발생 [InputStream]");
+        } finally {
+            if (shouldCloseStream) {
+                S2StreamUtil.closeStream(input);
+            }
+        }
+    }
+
+    /**
+     * 지정된 알고리즘으로 문자열을 해시로 변환하는 공통 구현.
+     * generateSHA256/generateSHA512/generateSHA512To256(String) 이 공유한다.
+     */
+    private static String generateHash(String algorithm, String input) {
+        if (input == null || input.isBlank()) {
+            return "";
+        }
+
+        try (ByteArrayInputStream inputStream = new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8))) {
+            return generateHashFromStream(algorithm, inputStream, null);
+        } catch (IOException | NoSuchAlgorithmException e) {
+            logger.error("{} Hash 오류 발생 [문자열 변환]", algorithm, e);
+            throw new S2RuntimeException(algorithm + " Hash 오류 발생 [문자열 변환]");
+        }
+    }
+
+    /**
+     * 지정된 알고리즘으로 바이트 배열을 해시로 변환하는 공통 구현.
+     * generateSHA256/generateSHA512/generateSHA512To256(byte[]) 이 공유한다.
+     */
+    private static String generateHash(String algorithm, byte[] input) {
         if (input == null) {
             return "";
         }
 
         try (ByteArrayInputStream inputStream = new ByteArrayInputStream(input)) {
-            return generateHashFromStream(HASH_ALGORITHM_SHA256, inputStream, null);
+            return generateHashFromStream(algorithm, inputStream, null);
         } catch (IOException | NoSuchAlgorithmException e) {
-            logger.error("SHA-256 Hash 오류 발생 [바이트 배열]", e);
-            throw new S2RuntimeException("SHA-256 Hash 오류 발생 [바이트 배열]");
+            logger.error("{} Hash 오류 발생 [바이트 배열]", algorithm, e);
+            throw new S2RuntimeException(algorithm + " Hash 오류 발생 [바이트 배열]");
         }
     }
 
@@ -521,14 +487,7 @@ public class S2HashUtil {
     }
 
     private static String bytesToHex(byte[] hash) {
-        var hexArray = "0123456789abcdef".toCharArray();
-        var hexChars = new StringBuilder(hash.length * 2); // StringBuilder 사용
-        for (byte b : hash) {
-            int v = b & 0xFF; // 바이트 값을 0-255 범위로 변환
-            hexChars.append(hexArray[v >>> 4]); // 상위 4비트 → 16진수 문자
-            hexChars.append(hexArray[v & 0x0F]); // 하위 4비트 → 16진수 문자
-        }
-        return hexChars.toString();
+        return java.util.HexFormat.of().formatHex(hash);
     }
 
     /**

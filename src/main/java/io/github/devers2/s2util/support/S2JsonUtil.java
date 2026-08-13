@@ -664,6 +664,11 @@ public class S2JsonUtil {
 
         // String -> 다양한 타입 변환
         if (value instanceof String str) {
+            if (targetType.isEnum()) {
+                @SuppressWarnings({ "unchecked", "rawtypes" })
+                var enumValue = Enum.valueOf((Class<Enum>) targetType, str);
+                return enumValue;
+            }
             if (targetType == int.class || targetType == Integer.class) {
                 return Integer.parseInt(str);
             }
@@ -777,6 +782,11 @@ public class S2JsonUtil {
                     }
                     return parseNumber();
                 default:
+                    // "-Infinity" 는 '-' 로 시작하므로 위 'N'/'I' 분기로 라우팅되지 않는다.
+                    // ALLOW_NON_NUMERIC_NUMBERS 가 켜진 경우에는 여기서도 특수값으로 처리한다.
+                    if (c == '-' && Feature.isEnabled(flags, Feature.ALLOW_NON_NUMERIC_NUMBERS) && json.startsWith("-Infinity", pos)) {
+                        return parseSpecialNumber();
+                    }
                     return parseNumber();
             }
         }
@@ -1026,7 +1036,7 @@ public class S2JsonUtil {
                 pos++;
             }
 
-            // Leading decimal point (예: .5)
+            // Leading decimal point (예: .5, .5e2)
             if (pos < json.length() && json.charAt(pos) == '.') {
                 if (!Feature.isEnabled(flags, Feature.ALLOW_LEADING_DECIMAL_POINT_FOR_NUMBERS)) {
                     throw new IllegalArgumentException("Leading decimal point not allowed");
@@ -1036,12 +1046,7 @@ public class S2JsonUtil {
                 while (pos < json.length() && Character.isDigit(json.charAt(pos))) {
                     pos++;
                 }
-                String numStr = json.substring(start, pos);
-                try {
-                    return Double.parseDouble(numStr);
-                } catch (NumberFormatException e) {
-                    throw new IllegalArgumentException("Invalid number: " + numStr);
-                }
+                // 아래 공통 Exponent 처리로 이어지도록 여기서 반환하지 않는다 (.5e2 같은 지수 표기 지원)
             }
 
             // Leading zeros

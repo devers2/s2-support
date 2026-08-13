@@ -20,6 +20,7 @@
  */
 package io.github.devers2.s2util.file.impl;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -29,6 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.Session;
+import com.jcraft.jsch.SftpException;
 import com.jcraft.jsch.SftpProgressMonitor;
 
 import io.github.devers2.s2util.exception.S2RuntimeException;
@@ -63,11 +65,15 @@ public class S2SftpFileManagerImpl implements FileManager {
 
     private static final int CHANNEL_CONNECT_TIMEOUT = 30_000; // 30초
     /*
-     * 다운로드 스트림 자동 정리 시간(밀리초)
-     * - 호출 측에서 InputStream.close()를 호출하지 않아도 최대 이 시간 후 자동으로 스트림/채널/세션을 정리합니다.
-     * - 장시간 유출(방치)로 인한 세션 풀 고갈을 방지하기 위함입니다.
+     * 다운로드 스트림 idle(마지막 read() 이후 미사용) 자동 정리 시간(밀리초)
+     * - 호출 측에서 InputStream.close()를 호출하지 않아도, 마지막 read() 이후 이 시간 동안
+     *   추가 읽기가 없으면 자동으로 스트림/채널/세션을 정리합니다.
+     * - "생성 후 경과 시간"이 아닌 "마지막 활동 이후 경과 시간" 기준이므로, 대용량 파일을
+     *   느린 회선으로 계속 읽고 있는 정상적인 다운로드는 끊기지 않습니다.
+     * - 장시간 유출(호출 측이 close()를 잊어버림)로 인한 세션 풀 고갈을 방지하기 위함입니다.
      */
-    private static final long MAX_STREAM_HOLD_MILLIS = 30L * 60_000L; // 30분
+    private static final long MAX_STREAM_IDLE_MILLIS = 5L * 60_000L; // 5분
+    private static final long STREAM_IDLE_CHECK_INTERVAL_MILLIS = 30_000L; // 30초마다 idle 여부 점검
 
     private final JschSessionFactory jschSessionFactory;
 
@@ -219,6 +225,9 @@ public class S2SftpFileManagerImpl implements FileManager {
      * @param savePath 원격 서버의 대상 파일 저장 경로
      * @param saveName 원격 서버의 대상 파일 저장 명
      * @return 파일 내용을 담은 InputStream
+     * @apiNote 반환된 InputStream 은 SFTP 세션 풀 리소스를 물고 있으므로 사용 후 반드시 close() 해야 한다
+     *          (try-with-resources 권장). 호출 측이 닫지 않더라도 마지막 read() 이후
+     *          {@code MAX_STREAM_IDLE_MILLIS} 동안 추가 읽기가 없으면 자동으로 정리된다.
      */
     public InputStream readFile(String savePath, String saveName) {
         var remoteFileFullPath = S2FileUtil.joinPaths(savePath, saveName);
@@ -227,8 +236,8 @@ public class S2SftpFileManagerImpl implements FileManager {
 
         try {
             // 세션/채널은 스트림을 반환하기 직전까지 열리며, 호출 측이 스트림을 닫을 때 함께 정리된다.
-            // 장시간 스트림을 닫지 않는 누수 케이스를 대비하여 AutoClosingResourceInputStream이
-            // MAX_STREAM_HOLD_MILLIS 이후 자동으로 스트림/채널/세션을 정리한다.
+            // 호출 측이 스트림을 닫지 않는 누수 케이스를 대비해 AutoClosingResourceInputStream이
+            // 마지막 read() 이후 MAX_STREAM_IDLE_MILLIS 동안 idle 상태면 자동으로 정리한다.
             session = jschSessionFactory.getSession();
             channel = (ChannelSftp) session.openChannel("sftp");
             channel.connect(CHANNEL_CONNECT_TIMEOUT);
@@ -243,7 +252,7 @@ public class S2SftpFileManagerImpl implements FileManager {
             ChannelSftp finalChannel = channel;
             Session finalSession = session;
 
-            return new AutoClosingResourceInputStream(bufferedInputStream, rawInputStream, finalChannel, finalSession, MAX_STREAM_HOLD_MILLIS, jschSessionFactory);
+            return new AutoClosingResourceInputStream(bufferedInputStream, rawInputStream, finalChannel, finalSession, MAX_STREAM_IDLE_MILLIS, STREAM_IDLE_CHECK_INTERVAL_MILLIS, jschSessionFactory);
         } catch (Exception e) {
             // 예외 발생 시 리소스 정리
             if (channel != null && channel.isConnected()) {
@@ -271,7 +280,7 @@ public class S2SftpFileManagerImpl implements FileManager {
         try {
             session = jschSessionFactory.getSession();
             channel = (ChannelSftp) session.openChannel("sftp");
-            channel.connect();
+            channel.connect(CHANNEL_CONNECT_TIMEOUT);
 
             if (exists(channel, remoteFileFullPath)) {
                 channel.rm(remoteFileFullPath);
@@ -291,8 +300,12 @@ public class S2SftpFileManagerImpl implements FileManager {
         try {
             channel.lstat(path);
             return true;
-        } catch (Exception e) {
-            return false;
+        } catch (SftpException e) {
+            // 파일/디렉토리가 실제로 없는 경우에만 false. 그 외(네트워크/권한 등) 오류는 그대로 전파한다.
+            if (e.id == ChannelSftp.SSH_FX_NO_SUCH_FILE) {
+                return false;
+            }
+            throw e;
         }
     }
 
@@ -311,10 +324,10 @@ public class S2SftpFileManagerImpl implements FileManager {
                 continue;
 
             fullPath.append("/").append(folder);
-            try {
-                channel.cd(fullPath.toString()); // 디렉토리가 존재하면 이동, 없으면 예외 발생
-            } catch (Exception e) {
-                channel.mkdir(fullPath.toString()); // 디렉토리 생성
+            // lstat 으로 존재 여부만 확인한다. cd()는 채널의 현재 작업 디렉토리를 바꾸는 부작용이 있어
+            // 이후 상대경로 기반의 exists()/put() 호출이 엉뚱한 위치를 가리키게 될 수 있으므로 사용하지 않는다.
+            if (!exists(channel, fullPath.toString())) {
+                channel.mkdir(fullPath.toString());
             }
         }
     }
@@ -343,7 +356,9 @@ public class S2SftpFileManagerImpl implements FileManager {
     }
 
     /*
-     * 다운로드 스트림이 호출 측에서 닫히지 않아도 일정 시간이 지나면 자동으로 닫히도록 하는 래퍼
+     * 다운로드 스트림이 호출 측에서 닫히지 않아도 일정 시간 idle 상태가 지속되면 자동으로 닫히도록 하는 래퍼
+     * - 마지막 read() 이후 경과 시간(idle time) 기준이므로, 계속 읽고 있는 정상적인 대용량/저속
+     *   다운로드는 끊기지 않고 진짜로 방치된 스트림만 정리 대상이 된다.
      * - 세션/채널 누수 방지 목적
      * - Java 8 호환을 위해 java.util.Timer 사용
      */
@@ -353,26 +368,65 @@ public class S2SftpFileManagerImpl implements FileManager {
         private final JschSessionFactory sessionFactory;
         private final Timer timer;
         private final TimerTask task;
+        private final long idleTimeoutMillis;
+        private volatile long lastActivityAtMillis;
 
-        AutoClosingResourceInputStream(InputStream buffered, InputStream raw, ChannelSftp channel, Session session, long autoCloseAfterMillis, JschSessionFactory sessionFactory) {
+        AutoClosingResourceInputStream(InputStream buffered, InputStream raw, ChannelSftp channel, Session session, long idleTimeoutMillis, long idleCheckIntervalMillis, JschSessionFactory sessionFactory) {
             super(buffered, raw);
             this.channel = channel;
             this.session = session;
             this.sessionFactory = sessionFactory;
+            this.idleTimeoutMillis = idleTimeoutMillis;
+            this.lastActivityAtMillis = System.currentTimeMillis();
             this.timer = new Timer("s2-sftp-autoclose", true);
             this.task = new TimerTask() {
                 @Override
                 public void run() {
-                    try {
-                        AutoClosingResourceInputStream.this.close();
-                    } catch (Exception ignored) {
+                    if (System.currentTimeMillis() - lastActivityAtMillis >= idleTimeoutMillis) {
+                        try {
+                            AutoClosingResourceInputStream.this.close();
+                        } catch (Exception ignored) {
+                        }
                     }
                 }
             };
             try {
-                this.timer.schedule(this.task, Math.max(1L, autoCloseAfterMillis));
+                var interval = Math.max(1L, idleCheckIntervalMillis);
+                this.timer.scheduleAtFixedRate(this.task, interval, interval);
             } catch (Exception ignored) {
             }
+        }
+
+        private void markActivity() {
+            this.lastActivityAtMillis = System.currentTimeMillis();
+        }
+
+        @Override
+        public int read() throws IOException {
+            var result = super.read();
+            markActivity();
+            return result;
+        }
+
+        @Override
+        public int read(byte[] b) throws IOException {
+            var result = super.read(b);
+            markActivity();
+            return result;
+        }
+
+        @Override
+        public int read(byte[] b, int off, int len) throws IOException {
+            var result = super.read(b, off, len);
+            markActivity();
+            return result;
+        }
+
+        @Override
+        public long skip(long n) throws IOException {
+            var result = super.skip(n);
+            markActivity();
+            return result;
         }
 
         @Override

@@ -61,7 +61,9 @@ public class S2CollectionUtil {
             return -1;
         }
 
-        if (Arrays.stream(conditions).anyMatch(c -> S2Util.isEmpty(c.getKey()) || S2Util.isEmpty(c.getValue()))) {
+        // 값(value)은 빈 문자열("") 같은 정상적인 검색 대상일 수 있으므로 검증하지 않는다.
+        // key 가 없는 조건만 무효로 처리한다.
+        if (Arrays.stream(conditions).anyMatch(c -> S2Util.isEmpty(c.getKey()))) {
             return -1;
         }
 
@@ -109,8 +111,8 @@ public class S2CollectionUtil {
         for (T item : list) {
             boolean allConditionsMet = true;
             for (Entry<K, V> condition : conditions) {
+                // 값(value)은 빈 문자열("") 같은 정상적인 검색 대상일 수 있으므로 검증하지 않는다.
                 boolean currentConditionMet = S2Util.isNotEmpty(condition.getKey())
-                        && S2Util.isNotEmpty(condition.getValue())
                         && Objects.equals(S2Util.getValue(item, condition.getKey()), condition.getValue());
 
                 if (!currentConditionMet) {
@@ -188,12 +190,21 @@ public class S2CollectionUtil {
             return String.valueOf(va).compareTo(String.valueOf(vb));
         };
 
-        if ("DESC".equalsIgnoreCase(orderBy)) {
-            list.sort(comparator.reversed());
-        } else {
-            list.sort(comparator);
+        // 호출자가 넘긴 리스트가 불변 리스트(List.of() 등)일 수 있으므로 원본을 직접 정렬하지
+        // 않고 복사본을 정렬해 반환한다.
+        var result = new ArrayList<>(list);
+        var effectiveComparator = "DESC".equalsIgnoreCase(orderBy) ? comparator.reversed() : comparator;
+
+        try {
+            result.sort(effectiveComparator);
+        } catch (IllegalArgumentException e) {
+            // 필드 값의 타입이 요소마다 뒤섞여 있어 위 comparator 가 total ordering 계약을
+            // 위반한 경우(TimSort 의 "Comparison method violates its general contract!").
+            // 항상 유효한 총순서를 보장하는 문자열 비교로 안전하게 다시 정렬한다.
+            Comparator<T> stringComparator = Comparator.comparing(item -> String.valueOf(S2Util.getValue(item, fieldName)));
+            result.sort("DESC".equalsIgnoreCase(orderBy) ? stringComparator.reversed() : stringComparator);
         }
-        return list;
+        return result;
     }
 
 }

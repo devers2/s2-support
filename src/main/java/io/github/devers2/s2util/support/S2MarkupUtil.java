@@ -55,8 +55,10 @@ public class S2MarkupUtil {
             return false;
         }
 
-        // 태그를 찾는 정규 표현식 (속성을 포함)
-        var tagRegex = String.format("<%s\\b[^>]*>|</%s>", tagName, tagName);
+        // 태그를 찾는 정규 표현식 (속성을 포함). 태그명은 정규식 메타문자가 섞여 들어와도
+        // 리터럴로만 매칭되도록 Pattern.quote 로 이스케이프한다.
+        var quotedTagName = Pattern.quote(tagName);
+        var tagRegex = "<" + quotedTagName + "\\b[^>]*>|</" + quotedTagName + ">";
         var tagPattern = Pattern.compile(tagRegex, Pattern.CASE_INSENSITIVE);
         var tagMatcher = tagPattern.matcher(markupString);
 
@@ -104,7 +106,8 @@ public class S2MarkupUtil {
         }
 
         // 태그를 찾는 정규 표현식 (속성을 포함, 대소문자 구분 없음)
-        var tagRegex = String.format("<%s\\b[^>]*>|</%s>", removeTagName, removeTagName);
+        var quotedTagName = Pattern.quote(removeTagName);
+        var tagRegex = "<" + quotedTagName + "\\b[^>]*>|</" + quotedTagName + ">";
         var tagPattern = Pattern.compile(tagRegex, Pattern.CASE_INSENSITIVE);
         var tagMatcher = tagPattern.matcher(markupString);
 
@@ -163,20 +166,31 @@ public class S2MarkupUtil {
             return markupString;
         }
 
-        // 중첩된 태그를 포함하여 열린 태그부터 닫힌 태그까지 제거
-        var regex = String.format("(?is)<%s\\b[^>]*>((?:(?!<%s\\b|</%s>)[\\s\\S])*(?:<%s\\b[^>]*>(?:(?!<%s\\b|</%s>)[\\s\\S])*</%s>(?:(?!<%s\\b|</%s>)[\\s\\S])*)*)*</%s>", removeTagName, removeTagName, removeTagName, removeTagName, removeTagName, removeTagName, removeTagName, removeTagName, removeTagName, removeTagName);
+        // 여는/닫는 태그만 매칭하고 깊이를 직접 추적하여 중첩 태그를 제거한다.
+        // (재귀적인 중첩 수량자 정규식은 catastrophic backtracking(ReDoS) 위험이 있어 사용하지 않는다)
+        var quotedTagName = Pattern.quote(removeTagName);
+        var tagRegex = "(?i)<" + quotedTagName + "\\b[^>]*>|</" + quotedTagName + "\\s*>";
+        var tagPattern = Pattern.compile(tagRegex);
+        var tagMatcher = tagPattern.matcher(markupString);
 
-        // 정규식 패턴 컴파일
-        // Java 8 Matcher 호환이 필요하면 StringBuffer 사용 (❗JAVA8에서는 Matcher에 StringBuilder를 사용할 수 없다.)
-        var pattern = Pattern.compile(regex);
-        var matcher = pattern.matcher(markupString);
         var sb = new StringBuilder();
+        var lastAppendEnd = 0;
+        var depth = 0;
 
-        // 중첩된 태그 제거
-        while (matcher.find()) {
-            matcher.appendReplacement(sb, "");
+        while (tagMatcher.find()) {
+            if (!tagMatcher.group().startsWith("</")) {
+                if (depth == 0) {
+                    sb.append(markupString, lastAppendEnd, tagMatcher.start());
+                }
+                depth++;
+            } else if (depth > 0) {
+                depth--;
+                if (depth == 0) {
+                    lastAppendEnd = tagMatcher.end();
+                }
+            }
         }
-        matcher.appendTail(sb);
+        sb.append(markupString, lastAppendEnd, markupString.length());
 
         return sb.toString();
     }
@@ -202,8 +216,11 @@ public class S2MarkupUtil {
             return markupString;
         }
 
+        // 태그명은 정규식 메타문자가 섞여 들어와도 리터럴로만 매칭되도록 이스케이프한다.
+        var quotedTagName = Pattern.quote(removeTagName);
+
         // 완전한 태그 쌍을 찾는 정규식 (줄바꿈 포함)
-        var completeTagRegex = String.format("(?s)<%s\\b[^>]*>.*?</%s>", removeTagName, removeTagName);
+        var completeTagRegex = "(?s)<" + quotedTagName + "\\b[^>]*>.*?</" + quotedTagName + ">";
         var completePattern = Pattern.compile(completeTagRegex);
         var completeMatcher = completePattern.matcher(markupString);
 
@@ -214,7 +231,7 @@ public class S2MarkupUtil {
         }
 
         // 모든 태그를 찾는 정규식
-        var allTagRegex = String.format("<%s\\b[^>]*>|</%s>", removeTagName, removeTagName);
+        var allTagRegex = "<" + quotedTagName + "\\b[^>]*>|</" + quotedTagName + ">";
         var allTagPattern = Pattern.compile(allTagRegex);
         var allTagMatcher = allTagPattern.matcher(markupString);
 

@@ -74,13 +74,26 @@ public class JschSessionFactory {
     /* 비밀번호 (privateKeyPath 가 없는 경우 사용) */
     private final String password;
 
-    private GenericObjectPool<Session> sessionPool;
+    // getSession()/returnSession() 등 동기화 없이 읽는 스레드에 forceResetPool()의 재할당이
+    // 즉시 보이도록 volatile 로 선언한다 (JMM 가시성 보장 없이는 스레드가 이미 close() 된
+    // 이전 풀을 임의의 시간 동안 계속 바라볼 수 있음).
+    private volatile GenericObjectPool<Session> sessionPool;
+
+    // forceResetPool() 에서 재사용하기 위해 실제 적용된 풀 크기를 보관한다.
+    // (하드코딩된 DEFAULT_* 를 다시 쓰면 사용자가 지정한 커스텀 크기가 재초기화 때마다 유실된다)
+    private final int sessionMaxTotal;
+    private final int sessionMinIdle;
+
+    // 짧은 시간 내 중복 강제 초기화(thundering herd) 방지: 여러 스레드가 동시에 풀 고갈을
+    // 감지해 forceResetPool()을 호출해도, synchronized 로 직렬화된 후속 호출은 직전 호출이
+    // 방금 새로 만든 풀을 불필요하게 다시 파괴하지 않도록 최소 간격 내에서는 건너뛴다.
+    private static final long MIN_RESET_INTERVAL_MILLIS = 5_000L;
+    private volatile long lastPoolResetAtMillis = 0L;
 
     /* 세션 풀에서 사용 가능한 세션을 기다리는 최대 시간 */
     private final Integer sessionMaxWaitMillis;
 
     private static final int MAX_RETRY_COUNT = 3;
-    private volatile boolean isPoolExhausted = false;
 
     /**
      * @param host           sftp host
@@ -98,30 +111,9 @@ public class JschSessionFactory {
         this.passphrase = passphrase;
         this.password = password;
 
-        // 세션 풀 설정
-        sessionPool = new GenericObjectPool<>(new SessionFactory());
-        sessionPool.setMaxTotal(DEFAULT_SESSION_MAX_TOTAL);
-        sessionPool.setMinIdle(DEFAULT_SESSION_MIN_IDLE);
-        sessionPool.setMaxIdle(sessionPool.getMaxTotal());
-
-        // 세션 풀 검증/정비 설정
-        sessionPool.setTestOnBorrow(true);
-        sessionPool.setTestOnReturn(true);
-        sessionPool.setTestWhileIdle(true);
-        sessionPool.setDurationBetweenEvictionRuns(Duration.ofMillis(EVICTION_RUN_INTERVAL_MILLIS));
-        sessionPool.setMinEvictableIdleDuration(Duration.ofMillis(IDLE_EVICT_MILLIS));
-        sessionPool.setBlockWhenExhausted(true); // 풀이 가득 찼을 때 블록킹
-        sessionPool.setTestOnCreate(true); // 객체 생성 시 검증
-
-        // 반납되지 않은(대여 중 방치) 세션 회수 설정
-        var abandonedConfig = new AbandonedConfig();
-        abandonedConfig.setRemoveAbandonedOnMaintenance(true);
-        abandonedConfig.setRemoveAbandonedTimeout(Duration.ofSeconds(ABANDONED_TIMEOUT_SECONDS));
-        // 빌리는 시점에도 방치(대여 상태) 세션 회수 활성화
-        // - ABANDONED_TIMEOUT_SECONDS 초과한 세션만 회수 대상
-        // - 장시간 홀드 중인 작업은 강제 종료되어 I/O 실패가 발생할 수 있으므로 운영 모니터링 권장
-        abandonedConfig.setRemoveAbandonedOnBorrow(true);
-        sessionPool.setAbandonedConfig(abandonedConfig);
+        this.sessionMaxTotal = DEFAULT_SESSION_MAX_TOTAL;
+        this.sessionMinIdle = DEFAULT_SESSION_MIN_IDLE;
+        sessionPool = createSessionPool(this.sessionMaxTotal, this.sessionMinIdle);
 
         this.sessionMaxWaitMillis = DEFAULT_SESSION_MAX_WAIT_MILLIS;
     }
@@ -147,20 +139,31 @@ public class JschSessionFactory {
         this.passphrase = passphrase;
         this.password = password;
 
-        // 세션 풀 설정
-        sessionPool = new GenericObjectPool<>(new SessionFactory());
-        sessionPool.setMaxTotal(sessionMaxTotal != null ? sessionMaxTotal : DEFAULT_SESSION_MAX_TOTAL);
-        sessionPool.setMinIdle(sessionMinIdle != null ? sessionMinIdle : DEFAULT_SESSION_MIN_IDLE);
-        sessionPool.setMaxIdle(sessionPool.getMaxTotal());
+        this.sessionMaxTotal = sessionMaxTotal != null ? sessionMaxTotal : DEFAULT_SESSION_MAX_TOTAL;
+        this.sessionMinIdle = sessionMinIdle != null ? sessionMinIdle : DEFAULT_SESSION_MIN_IDLE;
+        sessionPool = createSessionPool(this.sessionMaxTotal, this.sessionMinIdle);
+
+        this.sessionMaxWaitMillis = sessionMaxWaitMillis != null ? sessionMaxWaitMillis : DEFAULT_SESSION_MAX_WAIT_MILLIS;
+    }
+
+    /**
+     * 세션 풀을 생성하고 공통 설정(검증/정비/방치 세션 회수 정책)을 적용한다.
+     * 두 생성자와 forceResetPool() 이 동일한 설정을 공유한다.
+     */
+    private GenericObjectPool<Session> createSessionPool(int maxTotal, int minIdle) {
+        var pool = new GenericObjectPool<>(new SessionFactory());
+        pool.setMaxTotal(maxTotal);
+        pool.setMinIdle(minIdle);
+        pool.setMaxIdle(maxTotal);
 
         // 세션 풀 검증/정비 설정
-        sessionPool.setTestOnBorrow(true); // 대여 시 검증
-        sessionPool.setTestOnReturn(true); // 반환 시 검증
-        sessionPool.setTestWhileIdle(true); // 유휴 상태일 때 검증
-        sessionPool.setDurationBetweenEvictionRuns(Duration.ofMillis(EVICTION_RUN_INTERVAL_MILLIS)); // 주기적 유휴 검사
-        sessionPool.setMinEvictableIdleDuration(Duration.ofMillis(IDLE_EVICT_MILLIS)); // 오래된 유휴 세션 제거
-        sessionPool.setBlockWhenExhausted(true); // 풀이 가득 찼을 때 블록킹
-        sessionPool.setTestOnCreate(true); // 객체 생성 시 검증
+        pool.setTestOnBorrow(true); // 대여 시 검증
+        pool.setTestOnReturn(true); // 반환 시 검증
+        pool.setTestWhileIdle(true); // 유휴 상태일 때 검증
+        pool.setDurationBetweenEvictionRuns(Duration.ofMillis(EVICTION_RUN_INTERVAL_MILLIS)); // 주기적 유휴 검사
+        pool.setMinEvictableIdleDuration(Duration.ofMillis(IDLE_EVICT_MILLIS)); // 오래된 유휴 세션 제거
+        pool.setBlockWhenExhausted(true); // 풀이 가득 찼을 때 블록킹
+        pool.setTestOnCreate(true); // 객체 생성 시 검증
 
         // 반납되지 않은(대여 중 방치) 세션 회수 설정
         var abandonedConfig = new AbandonedConfig();
@@ -170,9 +173,9 @@ public class JschSessionFactory {
         // - ABANDONED_TIMEOUT_SECONDS 초과한 세션만 회수 대상
         // - 장시간 홀드 중인 작업은 강제 종료되어 I/O 실패가 발생할 수 있으므로 운영 모니터링 권장
         abandonedConfig.setRemoveAbandonedOnBorrow(true);
-        sessionPool.setAbandonedConfig(abandonedConfig);
+        pool.setAbandonedConfig(abandonedConfig);
 
-        this.sessionMaxWaitMillis = sessionMaxWaitMillis != null ? sessionMaxWaitMillis : DEFAULT_SESSION_MAX_WAIT_MILLIS;
+        return pool;
     }
 
     private class SessionFactory implements PooledObjectFactory<Session> {
@@ -241,12 +244,10 @@ public class JschSessionFactory {
 
         while (retryCount < MAX_RETRY_COUNT) {
             try {
-                if (isPoolExhausted || sessionPool.getNumActive() >= sessionPool.getMaxTotal() * 0.9) {
-                    logger.warn("세션 풀 상태 위험 - 강제 초기화 진행 (현재 상태: {}})", getPoolStatus());
-                    forceResetPool();
-                    Thread.sleep(1000); // 풀 초기화 후 잠시 대기
-                }
-
+                // 풀 사용률이 높은 것("바쁨")만으로는 초기화하지 않는다. blockWhenExhausted +
+                // sessionMaxWaitMillis 대기가 정상적인 backpressure 역할을 하므로, 여기서
+                // 대여를 그대로 시도하고 실제로 실패(타임아웃/풀 close 등, 즉 "고장")했을 때만
+                // 아래 catch 에서 forceResetPool() 로 복구한다.
                 var session = sessionPool.borrowObject(Duration.ofMillis(sessionMaxWaitMillis));
                 if (session != null) {
                     if (!session.isConnected()) {
@@ -257,15 +258,16 @@ public class JschSessionFactory {
                             throw e;
                         }
                     }
-                    isPoolExhausted = false;
                     return session;
                 }
             } catch (Exception e) {
                 lastException = e;
                 logger.error("세션 획득 실패 (시도 {}) - ", (retryCount + 1) + "/" + MAX_RETRY_COUNT, e);
 
-                if (e instanceof NoSuchElementException || e.getMessage().contains("Pool not open")) {
-                    isPoolExhausted = true;
+                // borrowObject() 타임아웃(NoSuchElementException) 또는 풀이 닫혀버린 경우처럼
+                // 풀이 실제로 "고장"난 신호일 때만 강제 초기화한다. forceResetPool() 내부의
+                // 디바운스(MIN_RESET_INTERVAL_MILLIS)가 짧은 시간 내 반복 초기화를 막아준다.
+                if (e instanceof NoSuchElementException || (e.getMessage() != null && e.getMessage().contains("Pool not open"))) {
                     forceResetPool();
                 }
             }
@@ -295,6 +297,13 @@ public class JschSessionFactory {
     }
 
     private synchronized void forceResetPool() {
+        // synchronized 로 직렬화되어 들어온 뒤에도, 직전 호출이 이미 최근에 풀을 새로 만들었다면
+        // (다른 스레드가 동시에 같은 고갈 상태를 감지해 대기했던 경우) 중복 초기화를 건너뛴다.
+        if (System.currentTimeMillis() - lastPoolResetAtMillis < MIN_RESET_INTERVAL_MILLIS) {
+            logger.info("세션 풀이 최근에 이미 초기화되어 중복 초기화를 건너뜁니다.");
+            return;
+        }
+
         try {
             logger.info("세션 풀 강제 초기화 시작 - 현재 상태: {}", getPoolStatus());
 
@@ -306,43 +315,23 @@ public class JschSessionFactory {
             }
 
             // 2. 새로운 세션 풀 생성
-            var factory = new SessionFactory();
-            var newPool = new GenericObjectPool<>(factory);
-
-            // 3. 새 풀 설정
-            newPool.setMaxTotal(DEFAULT_SESSION_MAX_TOTAL);
-            newPool.setMinIdle(DEFAULT_SESSION_MIN_IDLE);
-            newPool.setMaxIdle(DEFAULT_SESSION_MAX_TOTAL);
-            newPool.setTestOnBorrow(true);
-            newPool.setTestOnReturn(true);
-            newPool.setTestWhileIdle(true);
-            newPool.setDurationBetweenEvictionRuns(Duration.ofMillis(EVICTION_RUN_INTERVAL_MILLIS));
-            newPool.setMinEvictableIdleDuration(Duration.ofMillis(IDLE_EVICT_MILLIS));
-            newPool.setBlockWhenExhausted(true);
+            // 2~3. 새로운 세션 풀 생성 및 공통 설정 적용 (생성자에서 지정된 커스텀 크기를 그대로 유지한다)
+            var newPool = createSessionPool(sessionMaxTotal, sessionMinIdle);
+            // 초기 min-idle 세션을 채우는 아래 5번 단계가 무한 대기하지 않도록 이 풀 인스턴스에만 별도로 제한을 둔다.
             newPool.setMaxWait(Duration.ofSeconds(30));
-
-            // 반납되지 않은(대여 중 방치) 세션 회수 설정
-            var abandonedConfig = new AbandonedConfig();
-            abandonedConfig.setRemoveAbandonedOnMaintenance(true);
-            abandonedConfig.setRemoveAbandonedTimeout(Duration.ofSeconds(ABANDONED_TIMEOUT_SECONDS));
-            // 빌리는 시점에도 방치(대여 상태) 세션 회수 활성화
-            // - ABANDONED_TIMEOUT_SECONDS 초과한 세션만 회수 대상
-            // - 장시간 홀드 중인 작업은 강제 종료되어 I/O 실패가 발생할 수 있으므로 운영 모니터링 권장
-            abandonedConfig.setRemoveAbandonedOnBorrow(true);
-            newPool.setAbandonedConfig(abandonedConfig);
 
             // 4. 기존 풀 참조 교체
             this.sessionPool = newPool;
+            this.lastPoolResetAtMillis = System.currentTimeMillis();
 
             // 5. 최소 세션 생성
             try {
-                for (var i = 0; i < DEFAULT_SESSION_MIN_IDLE; i++) {
+                for (var i = 0; i < sessionMinIdle; i++) {
                     var session = this.sessionPool.borrowObject();
                     if (session != null) {
                         this.sessionPool.returnObject(session);
                     }
                 }
-                isPoolExhausted = false;
             } catch (Exception e) {
                 logger.error("초기 세션 생성 실패: {}", e.getMessage(), e);
             }

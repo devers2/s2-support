@@ -592,12 +592,14 @@ class S2JsonUtilTest {
     @DisplayName("Feature 테스트: ALLOW_NON_NUMERIC_NUMBERS")
     void testFeatureNonNumericNumbers() {
         String json = "{\"nan\":NaN, \"infinity\":Infinity, \"negInfinity\":-Infinity}";
-        // ALLOW_NON_NUMERIC_NUMBERS Feature가 지원되지 않으므로 파싱 실패
         Map<String, Object> result = S2JsonUtil.parseJson(
                 json,
                 S2JsonUtil.Feature.ALLOW_NON_NUMERIC_NUMBERS
         );
-        assertNull(result); // 지원되지 않는 Feature이므로 null
+        assertNotNull(result);
+        assertEquals(Double.NaN, result.get("nan"));
+        assertEquals(Double.POSITIVE_INFINITY, result.get("infinity"));
+        assertEquals(Double.NEGATIVE_INFINITY, result.get("negInfinity"));
     }
 
     @Test

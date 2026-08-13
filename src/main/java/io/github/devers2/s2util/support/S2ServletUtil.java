@@ -278,21 +278,22 @@ public class S2ServletUtil {
 
     private static String getFilenameFromHeader(String contentDisposition) {
         var fileName = "";
-        if (contentDisposition != null && contentDisposition.contains("filename=")) {
-            // filename*=UTF-8''file.pdf 와 같은 형식도 처리하기 위해 정규표현식 사용
-            var pattern = Pattern.compile("filename(?:\\*=?UTF-8''|=\"([^\"]*)\")");
+        if (contentDisposition != null && contentDisposition.contains("filename")) {
+            // filename*=UTF-8''file.pdf(확장 인코딩), filename="file.pdf"(따옴표),
+            // filename=file.pdf(따옴표 없음, 흔한 형식이나 기존엔 미지원) 세 가지 형식을 모두 처리
+            var pattern = Pattern.compile("filename\\*=UTF-8''([^;]*)|filename=\"([^\"]*)\"|filename=([^;]*)", Pattern.CASE_INSENSITIVE);
             var matcher = pattern.matcher(contentDisposition);
             if (matcher.find()) {
                 if (matcher.group(1) != null) {
-                    fileName = matcher.group(1);
-                } else {
-                    // filename*=UTF-8''file.pdf 형식 처리
-                    var encodedFileName = contentDisposition.substring(contentDisposition.indexOf("''") + 2);
                     try {
-                        fileName = java.net.URLDecoder.decode(encodedFileName, "UTF-8");
+                        fileName = java.net.URLDecoder.decode(matcher.group(1).trim(), "UTF-8");
                     } catch (UnsupportedEncodingException e) {
                         fileName = "";
                     }
+                } else if (matcher.group(2) != null) {
+                    fileName = matcher.group(2);
+                } else if (matcher.group(3) != null) {
+                    fileName = matcher.group(3).trim();
                 }
             }
         }

@@ -22,10 +22,7 @@ package io.github.devers2.s2util.support;
 
 import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.Closeable;
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -44,15 +41,16 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.text.DecimalFormat;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -280,14 +278,7 @@ public class S2FileUtil {
      * @throws IOException IOException
      */
     public static String readFile(String filePath) throws IOException {
-        var content = new StringBuilder();
-        try (var reader = new BufferedReader(new FileReader(filePath))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                content.append(line).append("\n");
-            }
-        }
-        return content.toString();
+        return Files.readString(Paths.get(filePath), StandardCharsets.UTF_8);
     }
 
     /**
@@ -312,12 +303,11 @@ public class S2FileUtil {
      * @throws IOException IOException
      */
     public static boolean writeFile(String filePath, String content, boolean isAppend) throws IOException {
-        boolean result = false;
-        try (var writer = new BufferedWriter(new FileWriter(filePath, isAppend))) {
-            writer.write(content);
-            result = true;
-        }
-        return result;
+        var openOptions = isAppend
+                ? new StandardOpenOption[] { StandardOpenOption.CREATE, StandardOpenOption.APPEND }
+                : new StandardOpenOption[] { StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE };
+        Files.writeString(Paths.get(filePath), content, StandardCharsets.UTF_8, openOptions);
+        return true;
     }
 
     /**
@@ -1138,63 +1128,64 @@ public class S2FileUtil {
      * @param sourceFile 대상 파일
      * @return MIME TYPE
      */
+    // 매 호출마다 새로 만들 필요 없이 한 번만 초기화해서 재사용한다.
+    private static final Map<String, String> MIME_TYPE_TO_EXTENSION = Map.ofEntries(
+            Map.entry("audio/aac", "aac"),
+            Map.entry("application/x-abiword", "abw"),
+            Map.entry("video/x-msvideo", "avi"),
+            Map.entry("application/vnd.amazon.ebook", "azw"),
+            Map.entry("application/octet-stream", "bin"),
+            Map.entry("application/x-bzip", "bz"),
+            Map.entry("application/x-bzip2", "bz2"),
+            Map.entry("application/x-csh", "csh"),
+            Map.entry("text/css", "css"),
+            Map.entry("text/csv", "csv"),
+            Map.entry("application/msword", "doc"),
+            Map.entry("application/epub+zip", "epub"),
+            Map.entry("image/gif", "gif"),
+            Map.entry("text/html", "html"),
+            Map.entry("image/x-icon", "ico"),
+            Map.entry("text/calendar", "ics"),
+            Map.entry("application/java-archive", "jar"),
+            Map.entry("image/jpeg", "jpg"),
+            Map.entry("text/javascript", "js"),
+            Map.entry("application/json", "json"),
+            Map.entry("audio/midi", "midi"),
+            Map.entry("video/mpeg", "mpeg"),
+            Map.entry("application/vnd.apple.installer+xml", "mpkg"),
+            Map.entry("application/vnd.oasis.opendocument.presentation", "odp"),
+            Map.entry("application/vnd.oasis.opendocument.spreadsheet", "ods"),
+            Map.entry("application/vnd.oasis.opendocument.text", "odt"),
+            Map.entry("audio/ogg", "oga"),
+            Map.entry("video/ogg", "ogv"),
+            Map.entry("application/ogg", "ogx"),
+            Map.entry("application/pdf", "pdf"),
+            Map.entry("application/vnd.ms-powerpoint", "ppt"),
+            Map.entry("application/x-rar-compressed", "rar"),
+            Map.entry("application/rtf", "rtf"),
+            Map.entry("application/x-sh", "sh"),
+            Map.entry("image/svg+xml", "svg"),
+            Map.entry("application/x-shockwave-flash", "swf"),
+            Map.entry("application/x-tar", "tar"),
+            Map.entry("image/tiff", "tif"),
+            Map.entry("application/x-font-ttf", "ttf"),
+            Map.entry("application/vnd.visio", "vsd"),
+            Map.entry("audio/x-wav", "wav"),
+            Map.entry("audio/webm", "weba"),
+            Map.entry("video/webm", "webm"),
+            Map.entry("image/webp", "webp"),
+            Map.entry("application/x-font-woff", "woff"),
+            Map.entry("application/xhtml+xml", "xhtml"),
+            Map.entry("application/vnd.ms-excel", "xls"),
+            Map.entry("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx")
+    );
+
     public static String getExtensionByMimeType(Path sourceFile) {
         String extension = "";
 
         if (sourceFile != null && Files.exists(sourceFile) && Files.isRegularFile(sourceFile)) {
             var mimeType = getContentType(sourceFile);
-
-            var mimeTypeMap = new HashMap<String, String>();
-            mimeTypeMap.put("audio/aac", "aac");
-            mimeTypeMap.put("application/x-abiword", "abw");
-            mimeTypeMap.put("video/x-msvideo", "avi");
-            mimeTypeMap.put("application/vnd.amazon.ebook", "azw");
-            mimeTypeMap.put("application/octet-stream", "bin");
-            mimeTypeMap.put("application/x-bzip", "bz");
-            mimeTypeMap.put("application/x-bzip2", "bz2");
-            mimeTypeMap.put("application/x-csh", "csh");
-            mimeTypeMap.put("text/css", "css");
-            mimeTypeMap.put("text/csv", "csv");
-            mimeTypeMap.put("application/msword", "doc");
-            mimeTypeMap.put("application/epub+zip", "epub");
-            mimeTypeMap.put("image/gif", "gif");
-            mimeTypeMap.put("text/html", "html");
-            mimeTypeMap.put("image/x-icon", "ico");
-            mimeTypeMap.put("text/calendar", "ics");
-            mimeTypeMap.put("application/java-archive", "jar");
-            mimeTypeMap.put("image/jpeg", "jpg");
-            mimeTypeMap.put("text/javascript", "js");
-            mimeTypeMap.put("application/json", "json");
-            mimeTypeMap.put("audio/midi", "midi");
-            mimeTypeMap.put("video/mpeg", "mpeg");
-            mimeTypeMap.put("application/vnd.apple.installer+xml", "mpkg");
-            mimeTypeMap.put("application/vnd.oasis.opendocument.presentation", "odp");
-            mimeTypeMap.put("application/vnd.oasis.opendocument.spreadsheet", "ods");
-            mimeTypeMap.put("application/vnd.oasis.opendocument.text", "odt");
-            mimeTypeMap.put("audio/ogg", "oga");
-            mimeTypeMap.put("video/ogg", "ogv");
-            mimeTypeMap.put("application/ogg", "ogx");
-            mimeTypeMap.put("application/pdf", "pdf");
-            mimeTypeMap.put("application/vnd.ms-powerpoint", "ppt");
-            mimeTypeMap.put("application/x-rar-compressed", "rar");
-            mimeTypeMap.put("application/rtf", "rtf");
-            mimeTypeMap.put("application/x-sh", "sh");
-            mimeTypeMap.put("image/svg+xml", "svg");
-            mimeTypeMap.put("application/x-shockwave-flash", "swf");
-            mimeTypeMap.put("application/x-tar", "tar");
-            mimeTypeMap.put("image/tiff", "tif");
-            mimeTypeMap.put("application/x-font-ttf", "ttf");
-            mimeTypeMap.put("application/vnd.visio", "vsd");
-            mimeTypeMap.put("audio/x-wav", "wav");
-            mimeTypeMap.put("audio/webm", "weba");
-            mimeTypeMap.put("video/webm", "webm");
-            mimeTypeMap.put("image/webp", "webp");
-            mimeTypeMap.put("application/x-font-woff", "woff");
-            mimeTypeMap.put("application/xhtml+xml", "xhtml");
-            mimeTypeMap.put("application/vnd.ms-excel", "xls");
-            mimeTypeMap.put("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx");
-
-            extension = mimeTypeMap.getOrDefault(mimeType, ""); // 기본값 처리
+            extension = MIME_TYPE_TO_EXTENSION.getOrDefault(mimeType, "");
         }
 
         return extension;
