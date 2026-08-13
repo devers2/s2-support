@@ -51,11 +51,17 @@ public class JschSessionFactory {
      * - EVICTION_RUN_INTERVAL_MILLIS: 유휴 객체 정비 주기 (밀리초)
      * - IDLE_EVICT_MILLIS: 사용하지 않은 유휴 세션의 최대 보관 시간 (밀리초)
      * - ABANDONED_TIMEOUT_SECONDS: 반납되지 않은(대여 상태로 방치된) 세션 강제 회수 시간 (초)
-     * (예: 다운로드 InputStream 미정리 등으로 반납되지 않은 세션 회수)
+     *
+     * ABANDONED_TIMEOUT_SECONDS 는 "빌린 시점 이후 경과 시간" 기준이라(commons-pool2 가
+     * TrackedUse 를 구현하지 않는 Session 객체의 실제 활동 여부는 알 수 없음), 정상적으로 오래
+     * 걸리는 작업까지 방치로 오판할 수 있다. 그래서 S2SftpFileManagerImpl 쪽에 "마지막 활동
+     * (read()/count() 콜백) 이후 idle 시간" 기준의 정밀한 워치독을 별도로 두어 업/다운로드
+     * 전송 구간을 우선 감시하고, 이 값은 그 워치독이 커버하지 못하는 범위(전송 전후의 다른
+     * 블로킹 SFTP 호출이 멈추는 등, 극히 드문 경우)를 위한 최후의 안전망으로만 아주 길게 잡는다.
      */
     private static final long EVICTION_RUN_INTERVAL_MILLIS = 60_000L; // 1분
     private static final long IDLE_EVICT_MILLIS = 30L * 60_000L; // 30분
-    private static final int ABANDONED_TIMEOUT_SECONDS = 30 * 60; // 30분
+    private static final int ABANDONED_TIMEOUT_SECONDS = 2 * 60 * 60; // 2시간 (최후의 안전망)
 
     /* 최대 세션 수 기본값 (64/128/256) */
     private final int DEFAULT_SESSION_MAX_TOTAL = 128;
@@ -125,9 +131,13 @@ public class JschSessionFactory {
      * @param privateKeyPath       sftp private key path
      * @param passphrase           sftp private key passphrase
      * @param password             sftp password
-     * @param sessionMaxTotal      세션 풀의 최대 세션 수
-     * @param sessionMinIdle       세션 풀에 유휴 상태로 유지할 최소 세션 수
+     * @param sessionMaxTotal      세션 풀의 최대 세션 수 (기본값 128)
+     * @param sessionMinIdle       세션 풀에 유휴 상태로 유지할 최소 세션 수 (기본값 16)
      * @param sessionMaxWaitMillis 세션 풀에서 사용 가능한 세션을 기다리는 최대 시간
+     * @apiNote 기본값(128/16)을 그대로 쓰려면 대상 SFTP 서버(단일 서버 기준)의 sshd_config 에
+     *          {@code MaxStartups 20:30:128} 설정을 권장한다. 자세한 근거는
+     *          {@link io.github.devers2.s2util.file.impl.S2SftpFileManagerImpl#S2SftpFileManagerImpl(String, int, String, String, String, String, Integer, Integer, Integer)}
+     *          참고.
      */
     public JschSessionFactory(String host, int port, String username, String privateKeyPath,
             String passphrase, String password, Integer sessionMaxTotal, Integer sessionMinIdle,

@@ -65,15 +65,18 @@ public class S2SftpFileManagerImpl implements FileManager {
 
     private static final int CHANNEL_CONNECT_TIMEOUT = 30_000; // 30초
     /*
-     * 다운로드 스트림 idle(마지막 read() 이후 미사용) 자동 정리 시간(밀리초)
-     * - 호출 측에서 InputStream.close()를 호출하지 않아도, 마지막 read() 이후 이 시간 동안
-     *   추가 읽기가 없으면 자동으로 스트림/채널/세션을 정리합니다.
-     * - "생성 후 경과 시간"이 아닌 "마지막 활동 이후 경과 시간" 기준이므로, 대용량 파일을
-     *   느린 회선으로 계속 읽고 있는 정상적인 다운로드는 끊기지 않습니다.
-     * - 장시간 유출(호출 측이 close()를 잊어버림)로 인한 세션 풀 고갈을 방지하기 위함입니다.
+     * 업/다운로드 idle(마지막 활동 이후 미사용) 자동 정리 시간(밀리초)
+     * - 다운로드: 호출 측이 반환받은 InputStream 을 close() 하지 않아도, 마지막 read() 이후 이
+     *   시간 동안 추가 읽기가 없으면 자동으로 스트림/채널/세션을 정리합니다.
+     * - 업로드: JSch 진행률 콜백(count())이 마지막으로 호출된 이후 이 시간 동안 추가 진행이
+     *   없으면(=완전히 멈춘 전송) 채널을 강제로 끊어 블로킹 중인 put() 호출을 깨웁니다.
+     * - 둘 다 "생성/시작 후 경과 시간"이 아닌 "마지막 활동 이후 경과 시간" 기준이므로, 대용량
+     *   파일을 느린 회선으로 계속 주고받는 정상적인 전송은 끊기지 않습니다.
+     * - 장시간 유출(호출 측 close() 누락)이나 완전히 멎어버린 전송으로 인한 세션 풀 고갈을
+     *   방지하기 위함입니다.
      */
-    private static final long MAX_STREAM_IDLE_MILLIS = 5L * 60_000L; // 5분
-    private static final long STREAM_IDLE_CHECK_INTERVAL_MILLIS = 30_000L; // 30초마다 idle 여부 점검
+    private static final long TRANSFER_IDLE_MILLIS = 60_000L; // 1분
+    private static final long TRANSFER_IDLE_CHECK_INTERVAL_MILLIS = 30_000L; // 30초마다 idle 여부 점검
 
     private final JschSessionFactory jschSessionFactory;
 
@@ -96,9 +99,27 @@ public class S2SftpFileManagerImpl implements FileManager {
      * @param privateKeyPath       sftp private key path
      * @param passphrase           sftp private key passphrase
      * @param password             sftp password
-     * @param sessionMaxTotal      세션 풀의 최대 세션 수
-     * @param sessionMinIdle       세션 풀에 유휴 상태로 유지할 최소 세션 수
+     * @param sessionMaxTotal      세션 풀의 최대 세션 수 (기본값 128)
+     * @param sessionMinIdle       세션 풀에 유휴 상태로 유지할 최소 세션 수 (기본값 16)
      * @param sessionMaxWaitMillis 세션 풀에서 사용 가능한 세션을 기다리는 최대 시간
+     * @apiNote 세션 풀의 각 세션은 SFTP 서버와의 독립적인 SSH 연결이다. 기본값(128/16)을 그대로
+     *          사용하려면 대상 SFTP 서버(단일 서버 기준)의 sshd_config 를 아래와 같이 맞추는 것을
+     *          권장한다. (설정하지 않아도 평상시엔 문제없지만, 배포 직후 콜드스타트나 병렬 배치
+     *          작업처럼 다수의 신규 세션이 한꺼번에 필요한 순간에는 OpenSSH 기본값(MaxStartups
+     *          10:30:100)의 동시 신규 연결 제한에 걸려 간헐적인 연결 실패가 발생할 수 있다 — 이
+     *          라이브러리의 재시도 로직이 대부분 흡수하지만, 아래 설정으로 애초에 피하는 것이 좋다)
+     *
+     *          <pre>{@code
+     * 1단계) 서버 sshd_config:
+     *   MaxStartups 20:30:128
+     *   - 20  : 동시 신규 연결 20개까지는 무조건 허용 (minIdle 예열 + 평상시 트래픽 증가분 커버)
+     *   - 30  : 20개 초과 시 30%부터 시작해 선형으로 거부 확률 증가
+     *   - 128 : sessionMaxTotal 과 동일하게 맞춤. 이 풀은 구조상 이 값을 넘는 신규 연결을
+     *           동시에 요청하지 않으므로 "무조건 거부" 구간에는 도달하지 않는다.
+     *
+     * 2단계) 클라이언트 생성자 (단일 서버 기준, 위 설정을 적용했다면 기본값 그대로 사용):
+     *   new S2SftpFileManagerImpl(host, port, username, privateKeyPath, passphrase, password);
+     * }</pre>
      */
     public S2SftpFileManagerImpl(String host, int port, String username, String privateKeyPath, String passphrase, String password, Integer sessionMaxTotal, Integer sessionMinIdle, Integer sessionMaxWaitMillis) {
         // 디렉토리 캐시 TTL 우선순위: 시스템 프로퍼티 > 기본값
@@ -188,8 +209,15 @@ public class S2SftpFileManagerImpl implements FileManager {
                 throw new S2RuntimeException("이미 존재하는 원격 파일입니다: " + remoteFileFullPath);
             }
 
-            // 스트림 직접 전송 및 크기 추적
-            channel.put(bufferedInput, remoteFileFullPath, monitor);
+            // 스트림 직접 전송 및 크기 추적. 마지막 진행(count()) 이후 TRANSFER_IDLE_MILLIS 동안
+            // 진행이 없으면(정말로 멈춘 전송) 감시 타이머가 채널을 강제로 끊는다. 느리더라도 계속
+            // 진행 중인 정상 업로드는 count()가 계속 호출되어 끊기지 않는다.
+            var watchdog = startTransferIdleWatchdog(channel, monitor, TRANSFER_IDLE_MILLIS, TRANSFER_IDLE_CHECK_INTERVAL_MILLIS);
+            try {
+                channel.put(bufferedInput, remoteFileFullPath, monitor);
+            } finally {
+                watchdog.cancel();
+            }
             var transferSize = monitor.getTotalBytesTransferred();
 
             var attrs = channel.stat(remoteFileFullPath);
@@ -227,7 +255,7 @@ public class S2SftpFileManagerImpl implements FileManager {
      * @return 파일 내용을 담은 InputStream
      * @apiNote 반환된 InputStream 은 SFTP 세션 풀 리소스를 물고 있으므로 사용 후 반드시 close() 해야 한다
      *          (try-with-resources 권장). 호출 측이 닫지 않더라도 마지막 read() 이후
-     *          {@code MAX_STREAM_IDLE_MILLIS} 동안 추가 읽기가 없으면 자동으로 정리된다.
+     *          {@code TRANSFER_IDLE_MILLIS} 동안 추가 읽기가 없으면 자동으로 정리된다.
      */
     public InputStream readFile(String savePath, String saveName) {
         var remoteFileFullPath = S2FileUtil.joinPaths(savePath, saveName);
@@ -237,7 +265,7 @@ public class S2SftpFileManagerImpl implements FileManager {
         try {
             // 세션/채널은 스트림을 반환하기 직전까지 열리며, 호출 측이 스트림을 닫을 때 함께 정리된다.
             // 호출 측이 스트림을 닫지 않는 누수 케이스를 대비해 AutoClosingResourceInputStream이
-            // 마지막 read() 이후 MAX_STREAM_IDLE_MILLIS 동안 idle 상태면 자동으로 정리한다.
+            // 마지막 read() 이후 TRANSFER_IDLE_MILLIS 동안 idle 상태면 자동으로 정리한다.
             session = jschSessionFactory.getSession();
             channel = (ChannelSftp) session.openChannel("sftp");
             channel.connect(CHANNEL_CONNECT_TIMEOUT);
@@ -252,7 +280,7 @@ public class S2SftpFileManagerImpl implements FileManager {
             ChannelSftp finalChannel = channel;
             Session finalSession = session;
 
-            return new AutoClosingResourceInputStream(bufferedInputStream, rawInputStream, finalChannel, finalSession, MAX_STREAM_IDLE_MILLIS, STREAM_IDLE_CHECK_INTERVAL_MILLIS, jschSessionFactory);
+            return new AutoClosingResourceInputStream(bufferedInputStream, rawInputStream, finalChannel, finalSession, TRANSFER_IDLE_MILLIS, TRANSFER_IDLE_CHECK_INTERVAL_MILLIS, jschSessionFactory);
         } catch (Exception e) {
             // 예외 발생 시 리소스 정리
             if (channel != null && channel.isConnected()) {
@@ -335,14 +363,18 @@ public class S2SftpFileManagerImpl implements FileManager {
     // SizeTrackingMonitor를 static nested 클래스로 이동(로딩 비용 절감)
     private static class SizeTrackingMonitor implements SftpProgressMonitor {
         private long totalBytesTransferred = 0L;
+        // count()가 실제로 바이트를 전송할 때마다 갱신된다 (전송 idle 감시용 - 아래 startTransferIdleWatchdog 참고)
+        private volatile long lastProgressAtMillis = System.currentTimeMillis();
 
         @Override
         public void init(int op, String src, String dest, long max) {
+            lastProgressAtMillis = System.currentTimeMillis();
         }
 
         @Override
         public boolean count(long bytesTransferred) {
             totalBytesTransferred += bytesTransferred;
+            lastProgressAtMillis = System.currentTimeMillis();
             return true;
         }
 
@@ -353,6 +385,41 @@ public class S2SftpFileManagerImpl implements FileManager {
         long getTotalBytesTransferred() {
             return totalBytesTransferred;
         }
+
+        long getLastProgressAtMillis() {
+            return lastProgressAtMillis;
+        }
+    }
+
+    /**
+     * 전송(put/get) 중 일정 시간 이상 실제 진행(count() 호출)이 없으면 채널을 강제로 끊어
+     * 블로킹 중인 전송 호출을 깨우는 감시 타이머를 시작한다.
+     * (count()는 바이트가 실제로 오갈 때만 호출되므로, 완전히 멈춘 전송은 count() 내부에서는
+     * 감지할 수 없어 별도 스레드로 감시해야 한다.)
+     *
+     * @param channel             감시 대상 채널
+     * @param monitor             진행 시각을 추적하는 모니터
+     * @param idleTimeoutMillis   마지막 진행 이후 이 시간 동안 진행이 없으면 강제 종료
+     * @param checkIntervalMillis idle 여부 점검 주기
+     * @return 전송 완료 후 반드시 cancel() 해야 하는 Timer
+     */
+    private static Timer startTransferIdleWatchdog(ChannelSftp channel, SizeTrackingMonitor monitor, long idleTimeoutMillis, long checkIntervalMillis) {
+        var timer = new Timer("s2-sftp-transfer-watchdog", true);
+        var interval = Math.max(1L, checkIntervalMillis);
+        timer.scheduleAtFixedRate(new TimerTask() {
+            @Override
+            public void run() {
+                if (System.currentTimeMillis() - monitor.getLastProgressAtMillis() >= idleTimeoutMillis) {
+                    try {
+                        if (channel.isConnected()) {
+                            channel.disconnect(); // 블로킹 중인 put()/get() 을 예외로 깨운다
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+        }, interval, interval);
+        return timer;
     }
 
     /*
