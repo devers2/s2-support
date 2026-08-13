@@ -50,7 +50,7 @@ public class S2PaginationTag extends TagSupport {
             out.println(this.renderPagination(jsParam));
             return 6;
         } catch (IOException e) {
-            throw new JspException();
+            throw new JspException(e);
         }
     }
 
@@ -73,7 +73,10 @@ public class S2PaginationTag extends TagSupport {
         var firstPageNo = this.paginationInfo.getFirstPageNo();
         var firstPageNoOnPageList = this.paginationInfo.getFirstPageNoOnPageList();
         var totalPageCount = this.paginationInfo.getTotalPageCount();
-        var pageUnit = this.paginationInfo.getPageUnit();
+        // 페이지 "묶음(윈도우)" 이동 판단에는 페이지당 레코드 수(pageUnit)가 아니라 페이지 목록에
+        // 게시되는 페이지 건수(pageSize)를 써야 한다. getFirstPageNoOnPageList()/
+        // getLastPageNoOnPageList() 도 pageSize 기준으로 윈도우를 계산한다.
+        var pageSize = this.paginationInfo.getPageSize();
         var lastPageNoOnPageList = this.paginationInfo.getLastPageNoOnPageList();
         var pageNo = this.paginationInfo.getPageNo();
         var lastPageNo = this.paginationInfo.getLastPageNo();
@@ -108,8 +111,8 @@ public class S2PaginationTag extends TagSupport {
             lastPageLabel = MessageFormat.format(lastPageLabel, jsFunctionString);
         }
 
-        if (totalPageCount > pageUnit) {
-            if (firstPageNoOnPageList > pageUnit) {
+        if (totalPageCount > pageSize) {
+            if (firstPageNoOnPageList > pageSize) {
                 strBuff.append(MessageFormat.format(firstPageLabel, Integer.toString(firstPageNo)));
                 strBuff.append(MessageFormat.format(previousPageLabel, Integer.toString(firstPageNoOnPageList - 1)));
             } else {
@@ -125,9 +128,9 @@ public class S2PaginationTag extends TagSupport {
             }
         }
 
-        if (totalPageCount > pageUnit) {
+        if (totalPageCount > pageSize) {
             if (lastPageNoOnPageList < totalPageCount) {
-                strBuff.append(MessageFormat.format(nextPageLabel, Integer.toString(firstPageNoOnPageList + pageUnit)));
+                strBuff.append(MessageFormat.format(nextPageLabel, Integer.toString(firstPageNoOnPageList + pageSize)));
                 strBuff.append(MessageFormat.format(lastPageLabel, Integer.toString(lastPageNo)));
             } else {
                 strBuff.append(MessageFormat.format(nextPageLabel, Integer.toString(lastPageNo)));
