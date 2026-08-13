@@ -31,8 +31,18 @@ plugins {
     alias(libs.plugins.s2.build.support)
 
     /*
-     * ⭐ 'shadow' 플러그인을 적용하면 -all 타겟이 추가되어 의존성을 추가한 JAR 가 생성된다.
-     * ⭐ 'shadow' 플러그인을 적용하고 shadedPackagePrefix 을 설정한 경우, 자동으로 implementation, runtimeOnly 의존성을 relocate 처리한 Shadow JAR 가 생성된다.
+     * ⭐ [Shadow / Relocation 스위치 — 이 alias와 아래의 shadedPackagePrefix는 반드시 함께 켜고 꺼야 한다]
+     * 이 alias만 단독으로 켜면 S2BuildUtils는 이를 사용하지 않는다 (shadowJar 태스크는 등록되지만
+     * assemble/publish 파이프라인과 무관하게 방치됨). shadedPackagePrefix까지 함께 설정해야만
+     * S2BuildUtils가 shadowJar를 실제 패키징에 편입시킨다.
+     *
+     * - 둘 다 꺼짐(기본값, 지금 상태): 배포 시 Standard JAR(의존성 미포함, POM으로 전이),
+     *   로컬 빌드 시 Fat JAR(runtimeClasspath 전체 병합, relocation 없음) — Shadow 플러그인 미관여.
+     * - 둘 다 켜짐: 배포 시 Shaded JAR(implementation/runtimeOnly는 relocate되어 JAR에 포함,
+     *   api는 JAR에서 빠지고 POM에만 compile scope로 추가됨),
+     *   로컬 빌드 시 Relocated Fat JAR(api 포함 전체를 담되 api를 제외한 나머지만 relocate) — shadowJar 사용.
+     *
+     * 자세한 4가지 조합 표는 S2BuildUtils 클래스 최상단 Javadoc(Packaging Strategies) 참고.
      */
     // alias(libs.plugins.shadow)
 }
@@ -51,12 +61,8 @@ import io.github.devers2.buildsupport.S2BuildUtils
 group = "io.github.devers2.internal"
 version = "1.1.3"
 
-// 전역 변수 선언
-// GitHub Packages 리포지토리 정보 (devers2/s2-packages)
-extra["REPO_OWNER"] = "devers2"
-extra["REPO_NAME"] = "s2-util"
-
-// Shadow Plugin - Relocation 패키지 설정(미설정 시 Relocation이 적용되지 않음)
+// Shadow Plugin - Relocation 패키지 설정
+// ⚠️ 이 값을 설정해도 위 plugins{} 블록의 shadow alias가 함께 켜져 있지 않으면 아무 효과가 없다 (둘 다 켜야 함).
 // extra["shadedPackagePrefix"] = "io.github.devers2.s2util.shaded"
 
 // ========================================================================
@@ -167,14 +173,6 @@ val javaSrcRoot = "src/main/java"
 val resourcesSrcRoot = "src/main/resources"
 extra["JAVA_SRC_ROOT"] = javaSrcRoot
 extra["RESOURCES_SRC_ROOT"] = resourcesSrcRoot
-
-// GitHub Packages URL (.git 제외)
-val repoBaseUrl = "https://maven.pkg.github.com/${extra["REPO_OWNER"]}/${extra["REPO_NAME"]}"
-val githubUser = project.findProperty("gpr.user")?.toString() ?: System.getenv("GITHUB_ACTOR")
-val githubToken = project.findProperty("gpr.key")?.toString() ?: System.getenv("GITHUB_TOKEN")
-extra["REPO_BASE_URL"] = repoBaseUrl
-extra["GITHUB_USER"] = githubUser
-extra["GITHUB_TOKEN"] = githubToken
 
 
 // ========================================================================
@@ -376,40 +374,12 @@ publishing {
             }
         }
     }
-    repositories {
-        // GitHub Packages 설정
-        maven {
-            name = "s2-packages"
-            url = uri(repoBaseUrl)
-            credentials {
-                username = githubUser
-                password = githubToken
-            }
-        }
-        // Central Portal 배포 설정
-        maven {
-            name = "CentralPortal"
-            // Central Portal Zip Bundle Upload API (v1)
-            // publishingType → AUTOMATIC : 자동 배포, USER_MANAGED : 사용자 관리 배포 (수동 승인/배포 필요 시)
-            url = uri("https://central.sonatype.com/api/v1/publisher/upload?publishingType=USER_MANAGED")
-            credentials {
-                username = project.findProperty("centralUsername")?.toString()
-                password = project.findProperty("centralPassword")?.toString()
-            }
-        }
-    }
 }
 
-// GPG 서명 설정: 항상 Signing 플러그인을 적용하되, 배포 관련 태스크 실행 시에만 서명 수행
-signing {
-    // 배포(Publish) 태스크가 실행될 때만 서명 필수 (그 외 일반 빌드에서는 건너뜀)
-    setRequired({
-        gradle.taskGraph.allTasks.any {
-            it.name.contains("publish") || it.name.contains("Publish")
-        }
-    })
-    sign(publishing.publications["mavenJava"])
-}
+// 배포 리포지토리 설정 (S2BuildUtils 공통 로직 재사용 - CentralPortal 등록 + 서명 필수화까지 자동 처리됨)
+// [참고] GitHub Packages(s2-packages) 배포가 다시 필요해지면 아래 한 줄만 추가하면 된다:
+//   S2BuildUtils.configureGitHubPackagesRepository(project, "devers2", "s2-util")
+S2BuildUtils.configureCentralPortalRepository(project)
 
 tasks.named<Test>("test") {
     /**
