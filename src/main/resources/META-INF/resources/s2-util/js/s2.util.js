@@ -2823,16 +2823,23 @@ export const S2Util = {
    * @async
    * @param {string} publicKey - VAPID Public Key (Base64URL 형식).
    * @param {string} [userId] - 구독 캐시 키에 포함할 사용자 식별자. 지정하면 사용자별로 당일 구독 여부를 구분한다.
+   * @param {string} [confirmMessage] - 지정하면, 기존 구독 정보가 전혀 없는 첫 구독 시 이 메시지로 S2Util.confirm()을 띄워
+   * 사용자가 수락해야만 구독을 진행한다. 생략하면(기본값) 컨펌 없이 바로 구독을 진행한다.
    * @returns {void}
    *
    * @requires S2Util.getLocalStorage
    * @requires S2Util.setLocalStorage
    * @requires S2Util.urlBase64ToUint8Array
+   * @requires S2Util.confirm (confirmMessage 지정 시)
    *
    * @example
+   * // 컨펌 없이 바로 구독
    * S2Util.subscribeServiceWorker('BObv3x9...');
+   *
+   * // 첫 구독 시에만 확인창을 띄우고 싶은 경우
+   * S2Util.subscribeServiceWorker('BObv3x9...', userId, '알림 받기를 수락하시겠습니까?');
    */
-  async subscribeServiceWorker(publicKey, userId) {
+  async subscribeServiceWorker(publicKey, userId, confirmMessage) {
     if ('PushManager' in window && 'serviceWorker' in navigator) {
       const SUBSCRIPTION_STORAGE_KEY = 's2-subscription-data';
       const lastSubscriptionData = S2Util.getLocalStorage(SUBSCRIPTION_STORAGE_KEY);
@@ -2858,9 +2865,9 @@ export const S2Util = {
           });
 
         if (!confirmResult) {
-          // 기존 구독 정보가 전혀 없는 첫 구독이라도 별도 컨펌 없이 바로 구독을 진행한다.
-          // (컨펌을 다시 받고 싶다면 이 자리에서 S2Util.confirm(...)으로 confirmResult를 설정하면 된다.)
-          confirmResult = true;
+          // 기존 구독 정보가 전혀 없는 첫 구독인 경우: confirmMessage가 주어졌다면 확인을 받고,
+          // 아니면(기본값) 별도 컨펌 없이 바로 구독을 진행한다.
+          confirmResult = confirmMessage ? await S2Util.confirm(confirmMessage) : true;
         }
 
         if (confirmResult) {
