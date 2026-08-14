@@ -338,6 +338,10 @@ class S2Day {
    * @param {string} [formatString = 'YYYY/MM/DD HH:mm:ss'] - 포맷 문자열.
    * @param {string} [locale = 'ko'] - 로케일: 'ko' (기본, 한국어) | 'en' (영어)
    * @param {boolean} [returnEmptyOnInvalid=false] - true일 경우, 유효하지 않은 날짜(isValid() === false)면 빈 문자열('')을 반환. false(기본)일 경우 기본 동작을 따름.
+   * @param {{ tz?: 'local' | 'utc' | 'offset', offsetMinutes?: number }} [options] - 표시 기준 타임존 옵션 (diff/startOf/endOf와 동일한 규칙)
+   * - tz: 'local' (기본, 브라우저 로컬 타임존) | 'utc' (UTC 기준) | 'offset' (offsetMinutes로 지정한 고정 오프셋 기준).
+   * - offsetMinutes: tz가 'offset'일 때 사용되는 분 단위 오프셋(예: +09:00 → 540).
+   * - X/x(유닉스 타임스탬프) 토큰은 tz 옵션과 무관하게 항상 실제 절대 시각 기준이다.
    * @returns {string} - 포맷된 날짜 문자열
    *
    * @example
@@ -345,6 +349,7 @@ class S2Day {
    * S2Date('2025-10-30T15:30:00+09:00').format('YYYY-MM-DD HH:mm:ss', 'ko'); // '2025-10-30 15:30:00'
    * S2Date('2025-02-30', 'YYYY-MM-DD').format('YYYY-MM-DD HH:mm:ss', 'ko', true); // ''
    * S2Date('2025-02-30', 'YYYY-MM-DD').format('YYYY-MM-DD HH:mm:ss', 'ko', false); // '2025-03-02 00:00:00'
+   * S2Date('2025-10-30T23:30:00Z').format('YYYY-MM-DD HH:mm:ss ZZ', 'ko', false, { tz: 'utc' }); // '2025-10-30 23:30:00 +0000'
    *
    * @description
    * ### 지원하는 포맷 토큰
@@ -376,11 +381,27 @@ class S2Day {
    * X: 유닉스 타임스탬프 (초, 1761858311)
    * x: 유닉스 타임스탬프 (밀리초, 1761858311123)
    */
-  format(formatString = 'YYYY/MM/DD HH:mm:ss', locale = 'ko', returnEmptyOnInvalid = false) {
+  format(
+    formatString = 'YYYY/MM/DD HH:mm:ss',
+    locale = 'ko',
+    returnEmptyOnInvalid = false,
+    options = undefined
+  ) {
     if (returnEmptyOnInvalid && !this.isValid()) {
       return '';
     }
-    return _formatDate(this._date, formatString, locale);
+
+    const mode = options && typeof options.tz === 'string' ? options.tz.toLowerCase() : 'local';
+    if (mode === 'local') {
+      return _formatDate(this._date, formatString, locale);
+    }
+
+    // utc/offset 모드: 표시 필드만 해당 오프셋 기준으로 옮기고(startOf/endOf/diff와 동일한 방식),
+    // X/x(유닉스 타임스탬프)는 _formatDate 내부에서 원래의 절대 시각으로 되돌려 계산한다.
+    const off =
+      mode === 'offset' && typeof options.offsetMinutes === 'number' ? options.offsetMinutes : 0;
+    const shifted = new Date(this._date.getTime() + off * 60000);
+    return _formatDate(shifted, formatString, locale, off);
   }
 
   /**
@@ -521,12 +542,13 @@ class S2Day {
    * 다른 날짜와의 차이를 지정된 단위로 반환한다. (내림 처리)
    *
    * @param {Date | string | number | S2Date} otherDate - 비교할 날짜
-   * @param {'year' | 'month' | 'day' | 'hour' | 'minute' | 'second' | 'ms'} [unit = 'ms'] - 반환할 단위 (복수형 허용, 단위를 생략하면 ms까지 비교)
+   * @param {'year' | 'month' | 'day' | 'hour' | 'minute' | 'second' | 'ms'} [unit = 'ms'] - 반환할 단위 (복수형/'millisecond' 등 허용, 단위를 생략하면 ms까지 비교)
    * @param {boolean} [float = false] - 소수점까지 반환할지 여부 (true)
    * @param {{ tz?: 'local' | 'utc' | 'offset', offsetMinutes?: number }} [options] - 월/연 비교 시 타임존 기준 옵션
    * - tz: 'local' (기본) | 'utc' | 'offset'.
    * - offsetMinutes: tz가 'offset'일 때 사용되는 분 단위 오프셋(예: +09:00 → 540).
    * - 주의: 이 옵션은 'month'와 'year' 단위 계산에만 영향을 준다. ms/초/분/시간/일은 절대 시간(getTime) 기준으로 동일.
+   * @throws {Error} 인식할 수 없는 unit이 주어지면 예외를 던진다.
    *
    * 차이점:
    * - tz = 'local' (기본): 시스템 로컬 타임존의 연/월 필드를 사용해 경계를 판단한다.
@@ -688,9 +710,13 @@ class S2Day {
       case 'seconds':
         result = diffMs / 1000;
         break;
-      default: // 'ms'
+      case 'ms':
+      case 'millisecond':
+      case 'milliseconds':
         result = diffMs;
         break;
+      default:
+        throw new Error(`[S2Date] Unknown unit: ${unit}`);
     }
 
     return float ? result : Math.trunc(result);
@@ -705,6 +731,7 @@ class S2Day {
    * - offsetMinutes: tz = 'offset'일 때 사용되는 분 단위 오프셋(예: +09:00 → 540).
    * - 동작: 지정된 달력 기준으로 경계를 00시 00분 00초.000 으로 내림(floor)한다.
    * @returns {S2Date}
+   * @throws {Error} 인식할 수 없는 unit이 주어지면 예외를 던진다.
    *
    * @example
    * S2Date('2025-10-30 15:30').startOf('day') // local 기준
@@ -751,6 +778,8 @@ class S2Day {
         case 'seconds':
           newDate.setMilliseconds(0);
           break;
+        default:
+          throw new Error(`[S2Date] Unknown unit: ${unit}`);
       }
       const result = new S2Day(newDate);
       if (!this._isValid) result._setValid(false);
@@ -786,6 +815,8 @@ class S2Day {
       case 'seconds':
         shifted.setUTCMilliseconds(0);
         break;
+      default:
+        throw new Error(`[S2Date] Unknown unit: ${unit}`);
     }
     const resultUtcMs = shifted.getTime() - off * 60000;
     const result = new S2Day(new Date(resultUtcMs));
@@ -802,6 +833,7 @@ class S2Day {
    * - offsetMinutes: tz = 'offset'일 때 사용되는 분 단위 오프셋(예: +09:00 → 540).
    * - 동작: 지정된 달력 기준으로 경계를 23시 59분 59초.999 으로 올림(ceil-ε)한다.
    * @returns {S2Date}
+   * @throws {Error} 인식할 수 없는 unit이 주어지면 예외를 던진다.
    *
    * @example
    * S2Date('2025-10-30 15:30').endOf('day') // local 기준
@@ -848,6 +880,8 @@ class S2Day {
         case 'seconds':
           newDate.setMilliseconds(999);
           break;
+        default:
+          throw new Error(`[S2Date] Unknown unit: ${unit}`);
       }
       const result = new S2Day(new Date(newDate));
       if (!this._isValid) result._setValid(false);
@@ -883,6 +917,8 @@ class S2Day {
       case 'seconds':
         shifted.setUTCMilliseconds(999);
         break;
+      default:
+        throw new Error(`[S2Date] Unknown unit: ${unit}`);
     }
     const resultUtcMs = shifted.getTime() - off * 60000;
     const result = new S2Day(new Date(resultUtcMs));
@@ -969,12 +1005,19 @@ class S2Day {
 /**
  * 날짜를 지정된 포맷 문자열로 변환 (헬퍼 함수)
  *
- * @param {Date} [date = new Date()] - 포맷할 Date 객체
+ * @param {Date} [date = new Date()] - 포맷할 Date 객체. fixedOffsetMinutes가 주어졌다면, 호출자가 이미 해당 오프셋만큼 미리 옮겨놓은(shift) 시각이어야 한다.
  * @param {string} [formatString = 'YYYY/MM/DD HH:mm:ss'] - Day.js 스타일 포맷 문자열
  * @param {string} [locale = 'ko'] - 로케일: 'ko' (기본, 한국어) | 'en' (영어)
+ * @param {number|null} [fixedOffsetMinutes = null] - null이면 로컬 타임존 getter를 사용. 숫자가 주어지면(0=UTC 포함)
+ * UTC getter로 필드를 읽고(date가 이미 이 오프셋만큼 shift되어 있으므로), Z/ZZ는 이 오프셋으로, X/x는 원래의 절대 시각으로 계산한다.
  * @returns {string} 포맷된 날짜 문자열
  */
-function _formatDate(date = new Date(), formatString = 'YYYY/MM/DD HH:mm:ss', locale = 'ko') {
+function _formatDate(
+  date = new Date(),
+  formatString = 'YYYY/MM/DD HH:mm:ss',
+  locale = 'ko',
+  fixedOffsetMinutes = null
+) {
   if (!(date instanceof Date) || isNaN(date)) return '';
 
   const pad = (n, len = 2) => '0'.repeat(Math.max(0, len - String(n).length)) + n;
@@ -1052,37 +1095,52 @@ function _formatDate(date = new Date(), formatString = 'YYYY/MM/DD HH:mm:ss', lo
   const loc = locales[locale] || locales.ko;
   const { weekdays, weekdaysShort, weekdaysMin, months, monthsShort } = loc;
 
-  const YYYY = date.getFullYear();
+  // fixedOffsetMinutes가 주어지면(utc/offset 모드) UTC getter를, 아니면 로컬 getter를 사용한다.
+  const useFixedOffset = fixedOffsetMinutes !== null;
+  const getFullYear = () => (useFixedOffset ? date.getUTCFullYear() : date.getFullYear());
+  const getMonth = () => (useFixedOffset ? date.getUTCMonth() : date.getMonth());
+  const getDate = () => (useFixedOffset ? date.getUTCDate() : date.getDate());
+  const getDay = () => (useFixedOffset ? date.getUTCDay() : date.getDay());
+  const getHours = () => (useFixedOffset ? date.getUTCHours() : date.getHours());
+  const getMinutes = () => (useFixedOffset ? date.getUTCMinutes() : date.getMinutes());
+  const getSeconds = () => (useFixedOffset ? date.getUTCSeconds() : date.getSeconds());
+  const getMilliseconds = () =>
+    useFixedOffset ? date.getUTCMilliseconds() : date.getMilliseconds();
+
+  const YYYY = getFullYear();
   const YY = String(YYYY).slice(-2);
-  const MMMM = months[date.getMonth()];
-  const MMM = monthsShort[date.getMonth()];
-  const MM = pad(date.getMonth() + 1);
-  const M = date.getMonth() + 1;
-  const DD = pad(date.getDate());
-  const D = date.getDate();
-  const dddd = weekdays[date.getDay()];
-  const ddd = weekdaysShort[date.getDay()];
-  const dd = weekdaysMin[date.getDay()];
-  const d = date.getDay();
-  const A = date.getHours() >= 12 ? 'PM' : 'AM';
-  const a = date.getHours() >= 12 ? 'pm' : 'am';
-  const HH = pad(date.getHours());
-  const H = date.getHours();
-  const hh = pad(date.getHours() % 12 || 12);
-  const h = date.getHours() % 12 || 12;
-  const mm = pad(date.getMinutes());
-  const m = date.getMinutes();
-  const ss = pad(date.getSeconds());
-  const s = date.getSeconds();
-  const SSS = pad3(date.getMilliseconds());
-  const tzOffset = -date.getTimezoneOffset();
+  const MMMM = months[getMonth()];
+  const MMM = monthsShort[getMonth()];
+  const MM = pad(getMonth() + 1);
+  const M = getMonth() + 1;
+  const DD = pad(getDate());
+  const D = getDate();
+  const dddd = weekdays[getDay()];
+  const ddd = weekdaysShort[getDay()];
+  const dd = weekdaysMin[getDay()];
+  const d = getDay();
+  const A = getHours() >= 12 ? 'PM' : 'AM';
+  const a = getHours() >= 12 ? 'pm' : 'am';
+  const HH = pad(getHours());
+  const H = getHours();
+  const hh = pad(getHours() % 12 || 12);
+  const h = getHours() % 12 || 12;
+  const mm = pad(getMinutes());
+  const m = getMinutes();
+  const ss = pad(getSeconds());
+  const s = getSeconds();
+  const SSS = pad3(getMilliseconds());
+  const tzOffset = useFixedOffset ? fixedOffsetMinutes : -date.getTimezoneOffset();
   const tzSign = tzOffset >= 0 ? '+' : '-';
   const tzHours = pad(Math.floor(Math.abs(tzOffset) / 60));
   const tzMinutes = pad(Math.abs(tzOffset) % 60);
   const Z = `${tzSign}${tzHours}:${tzMinutes}`;
   const ZZ = `${tzSign}${tzHours}${tzMinutes}`;
-  const X = Math.floor(date.getTime() / 1000);
-  const x = date.getTime();
+  // X/x는 표시 타임존과 무관하게 항상 실제 절대 시각(epoch) 기준이어야 하므로,
+  // fixedOffsetMinutes 모드에서는 호출자가 미리 shift한 만큼을 되돌려 원래 시각을 복원한다.
+  const trueMs = useFixedOffset ? date.getTime() - fixedOffsetMinutes * 60000 : date.getTime();
+  const X = Math.floor(trueMs / 1000);
+  const x = trueMs;
 
   const map = {
     YYYY,
@@ -1115,7 +1173,7 @@ function _formatDate(date = new Date(), formatString = 'YYYY/MM/DD HH:mm:ss', lo
   };
 
   return formatString.replace(
-    /YYYY|YY|MMMM|MMM|MM|M|DD|D|dddd|ddd|dd|d|A|a|HH|H|hh|h|mm|m|ss|s|SSS|Z|ZZ|X|x/g,
+    /YYYY|YY|MMMM|MMM|MM|M|DD|D|dddd|ddd|dd|d|A|a|HH|H|hh|h|mm|m|ss|s|SSS|ZZ|Z|X|x/g,
     (m) => map[m]
   );
 }
@@ -1150,7 +1208,7 @@ const _parseTokenMap = {
 };
 
 /** _parseTokenMap의 키를 정규식으로 (긴 것부터) */
-const _parseTokenRegex = /YYYY|YY|MM|M|DD|D|A|a|HH|H|hh|h|mm|m|ss|s|SSS|Z|ZZ/g;
+const _parseTokenRegex = /YYYY|YY|MM|M|DD|D|A|a|HH|H|hh|h|mm|m|ss|s|SSS|ZZ|Z/g;
 
 /** 생성된 파서를 캐싱하기 위한 맵 */
 const _parserCache = new Map();
