@@ -61,6 +61,8 @@ export class S2DropZone {
    *         // dropFiles: 드롭된 파일 목록 (File 객체 배열)
    *     }
    * });
+   *
+   * @throws {Error} options.dropZone이 유효한 DOM 요소로 해석되지 않으면 예외를 던진다.
    */
   constructor(options = {}) {
     let dropZone = options.dropZone;
@@ -71,8 +73,9 @@ export class S2DropZone {
     }
 
     if (!dropZone) {
-      console.error('유효하지 않은 dropZone 입니다.');
-      return;
+      // 여기서 조용히 return하면(예외를 던지지 않으면) 이벤트가 하나도 연결되지 않은
+      // "좀비" 인스턴스가 정상 생성된 것처럼 반환되어 호출부가 실패를 알아채기 어렵다.
+      throw new Error('[S2DropZone] 유효하지 않은 dropZone 입니다.');
     }
 
     this.dropZone = dropZone;
@@ -98,18 +101,31 @@ export class S2DropZone {
   }
 
   /**
+   * 등록된 이벤트 리스너를 모두 해제한다. dropZone 요소를 재사용하되 이 인스턴스는 더 이상 쓰지 않을 때 호출한다.
+   * (destroy() 호출 이후에는 이 인스턴스를 재사용하지 않는다.)
+   *
+   * @example
+   * dropZone.destroy();
+   */
+  destroy() {
+    if (!this.dropZone) {
+      return;
+    }
+    this.dropZone.removeEventListener('dragenter', this._onDragEnter);
+    this.dropZone.removeEventListener('dragleave', this._onDragLeave);
+    this.dropZone.removeEventListener('dragover', this._onDragOver);
+    this.dropZone.removeEventListener('drop', this._onDrop);
+  }
+
+  /**
    * 이벤트 리스너 설정
    * @private
    */
   setupEventListeners() {
     const self = this;
 
-    if (!self.options) {
-      return;
-    }
-
-    // dragenter 이벤트
-    this.dropZone.addEventListener('dragenter', function (e) {
+    // 나중에 destroy()에서 removeEventListener로 해제할 수 있도록 핸들러를 인스턴스에 보관해둔다.
+    this._onDragEnter = function (e) {
       if (self.enableDrop === false) return;
 
       e.stopPropagation();
@@ -121,10 +137,9 @@ export class S2DropZone {
       if (self.options.dragenter && typeof self.options.dragenter === 'function') {
         self.options.dragenter(e, this);
       }
-    });
+    };
 
-    // dragleave 이벤트
-    this.dropZone.addEventListener('dragleave', function (e) {
+    this._onDragLeave = function (e) {
       if (self.enableDrop === false) return;
 
       e.stopPropagation();
@@ -136,10 +151,9 @@ export class S2DropZone {
       if (self.options.dragleave && typeof self.options.dragleave === 'function') {
         self.options.dragleave(e, this);
       }
-    });
+    };
 
-    // dragover 이벤트
-    this.dropZone.addEventListener('dragover', function (e) {
+    this._onDragOver = function (e) {
       if (self.enableDrop === false) return;
 
       e.stopPropagation();
@@ -151,10 +165,9 @@ export class S2DropZone {
       if (self.options.dragover && typeof self.options.dragover === 'function') {
         self.options.dragover(e, this);
       }
-    });
+    };
 
-    // drop 이벤트
-    this.dropZone.addEventListener('drop', function (e) {
+    this._onDrop = function (e) {
       if (self.enableDrop === false) return;
 
       e.stopPropagation();
@@ -186,6 +199,11 @@ export class S2DropZone {
       if (self.options.drop && typeof self.options.drop === 'function') {
         self.options.drop(e, this, dropFiles);
       }
-    });
+    };
+
+    this.dropZone.addEventListener('dragenter', this._onDragEnter);
+    this.dropZone.addEventListener('dragleave', this._onDragLeave);
+    this.dropZone.addEventListener('dragover', this._onDragOver);
+    this.dropZone.addEventListener('drop', this._onDrop);
   }
 }

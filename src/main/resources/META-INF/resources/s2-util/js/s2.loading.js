@@ -157,6 +157,14 @@ export const showS2Loading = (options) => {
     // 렌더링 도중 오류가 발생해도 토큰은 반드시 정리한다. 그렇지 않으면 이후 hideS2Loading()이
     // 아무리 호출되어도 이 토큰이 살아남아 오버레이가 영원히 표시된 것으로(또는 숨겨지지 않는 것으로) 남는다.
     g_activeLoadingTokens.delete(token);
+
+    // 오버레이가 DOM에 이미 붙은 뒤(예: setProgressBar/controlProgressBar 단계)에 예외가 발생하는
+    // 경우까지 포함해서, 실패 지점과 무관하게 화면에 고아 상태로 남지 않도록 정리한다.
+    // 단, 오버레이는 토큰별이 아니라 화면에 하나만 존재하는 공유 요소이므로, 아직 완료되지 않은
+    // 다른 요청(토큰)이 남아있다면 그 요청의 오버레이까지 함께 지우지 않도록 여기서는 건드리지 않는다.
+    if (g_activeLoadingTokens.size === 0) {
+      removeLoadingOverlay();
+    }
     throw error;
   }
 

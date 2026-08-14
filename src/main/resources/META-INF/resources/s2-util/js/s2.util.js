@@ -2997,7 +2997,23 @@ export const initializeS2DomEvents = () => {
     S2Util.receiveServiceWorkerEvents();
   }
 
+  // initializeS2DomEvents()가 다시 호출되어(예: ajax로 페이지 일부를 교체한 뒤 재초기화) 이미 처리된 요소를
+  // 다시 순회하더라도, 같은 종류의 리스너가 그 요소에 중복으로 붙지 않도록 요소별로 바인딩 여부를 기록한다.
+  const bindKeyupOnce = (element, flagName, listener) => {
+    const datasetKey = `s2Bound${flagName}`;
+    if (element.dataset[datasetKey] === 'true') {
+      return;
+    }
+    element.dataset[datasetKey] = 'true';
+    element.addEventListener('keyup', listener);
+  };
+
   document.querySelectorAll('[sch-enter]').forEach((element) => {
+    if (element.dataset.s2SchEnterBound === 'true') {
+      return;
+    }
+    element.dataset.s2SchEnterBound = 'true';
+
     element.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') {
         // [sch-enter] 요소에서 Enter 키를 누르면 기본 동작을 방지
@@ -3022,35 +3038,35 @@ export const initializeS2DomEvents = () => {
 
   // input:text[alphabetNumber] 요소 입력 정규화
   document.querySelectorAll('input[type="text"][alphabetNumber]').forEach((element) => {
-    element.addEventListener('keyup', () => {
+    bindKeyupOnce(element, 'AlphabetNumber', () => {
       element.value = element.value.replace(/[^a-zA-Z0-9:_.-]/gi, '');
     });
   });
 
   // input:text[alphabetOnly] 요소 입력 정규화
   document.querySelectorAll('input[type="text"][alphabetOnly]').forEach((element) => {
-    element.addEventListener('keyup', () => {
+    bindKeyupOnce(element, 'AlphabetOnly', () => {
       element.value = element.value.replace(/[^a-zA-Z:_]/gi, '');
     });
   });
 
   // input:text[toLowerCase] 요소 소문자로 변환
   document.querySelectorAll('input[type="text"][toLowerCase]').forEach((element) => {
-    element.addEventListener('keyup', () => {
+    bindKeyupOnce(element, 'ToLowerCase', () => {
       element.value = element.value.toLowerCase();
     });
   });
 
   // input:text[toUpperCase] 요소 대문자로 변환
   document.querySelectorAll('input[type="text"][toUpperCase]').forEach((element) => {
-    element.addEventListener('keyup', () => {
+    bindKeyupOnce(element, 'ToUpperCase', () => {
       element.value = element.value.toUpperCase();
     });
   });
 
   // input:text[numberOnly] 요소 숫자로만 변환
   document.querySelectorAll('input[type="text"][numberOnly]').forEach((element) => {
-    element.addEventListener('keyup', () => {
+    bindKeyupOnce(element, 'NumberOnly', () => {
       if (element.getAttribute('numberOnly') === 'comma') {
         element.value = S2Util.comma(element.value.replace(/[^0-9]/gi, ''));
       } else {
@@ -3061,28 +3077,28 @@ export const initializeS2DomEvents = () => {
 
   // input:text[engOnly] 요소 입력 정규화
   document.querySelectorAll('input[type="text"][engOnly]').forEach((element) => {
-    element.addEventListener('keyup', () => {
+    bindKeyupOnce(element, 'EngOnly', () => {
       element.value = element.value.replace(/[^a-zA-Z0-9\s]/gi, '');
     });
   });
 
   // input:text[datetime] 요소 입력 정규화
   document.querySelectorAll('input[type="text"][datetime]').forEach((element) => {
-    element.addEventListener('keyup', () => {
+    bindKeyupOnce(element, 'Datetime', () => {
       element.value = element.value.replace(/[^0-9:-]/gi, '');
     });
   });
 
   // input:text[phoneNumber] 요소 입력 정규화
   document.querySelectorAll('input[type="text"][phoneNumber]').forEach((element) => {
-    element.addEventListener('keyup', () => {
+    bindKeyupOnce(element, 'PhoneNumber', () => {
       element.value = element.value.replace(/[^0-9-]/gi, '');
     });
   });
 
   // input:text[maxByte] 요소 입력 바이트 수 제한
   document.querySelectorAll('input[type="text"][maxByte]').forEach((element) => {
-    element.addEventListener('keyup', () => {
+    bindKeyupOnce(element, 'MaxByte', () => {
       const maxByte = Number(element.getAttribute('maxByte'));
       if (maxByte && !isNaN(maxByte) && maxByte > 0) {
         const stringValue = element.value;
