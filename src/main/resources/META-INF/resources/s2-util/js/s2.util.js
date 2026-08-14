@@ -247,81 +247,50 @@ export const S2Util = {
       }
     };
 
+    // fetch() 전용 설정 키(FormData/JSON/QueryString 매개변수에서 분리되어 fetch 동작을 제어하는 값들)
+    const CONFIG_KEYS = ['method', 'dataType', 'responseType', 'disableDefaultErrorHandler', 'timeout', 'showOverlay', 'hideLoading'];
+
     let paramType = '';
     let method = 'GET';
-    let methodChecker = '';
     let dataType = '';
-    let dataTypeChecker = '';
     let responseType = 'JSON';
-    let responseTypeChecker = '';
-    let disableDefaultErrorHandler;
-    let timeout;
-    let showOverlay;
-    let hideLoading;
+    const config = {};
 
     if (S2Util.isFormData(param)) {
       paramType = 'FormData';
-      methodChecker = param.get('method');
-      dataTypeChecker = param.get('dataType');
-      responseTypeChecker = param.get('responseType');
-      disableDefaultErrorHandler = param.get('disableDefaultErrorHandler');
-      timeout = param.get('timeout');
-      showOverlay = param.get('showOverlay');
-      hideLoading = param.get('hideLoading');
-
-      param.delete('method');
-      param.delete('dataType');
-      param.delete('responseType');
-      param.delete('disableDefaultErrorHandler');
-      param.delete('timeout');
-      param.delete('showOverlay');
-      param.delete('hideLoading');
+      CONFIG_KEYS.forEach((key) => {
+        config[key] = param.get(key);
+        param.delete(key);
+      });
     } else if (S2Util.isJSON(param)) {
       paramType = 'JSON';
-      methodChecker = param.method;
-      dataTypeChecker = param.dataType;
-      responseTypeChecker = param.responseType;
-      disableDefaultErrorHandler = param.disableDefaultErrorHandler;
-      timeout = param.timeout;
-      showOverlay = param.showOverlay;
-      hideLoading = param.hideLoading;
-
-      delete param.method;
-      delete param.dataType;
-      delete param.responseType;
-      delete param.disableDefaultErrorHandler;
-      delete param.timeout;
-      delete param.showOverlay;
-      delete param.hideLoading;
+      CONFIG_KEYS.forEach((key) => {
+        config[key] = param[key];
+        delete param[key];
+      });
     } else if (S2Util.isQueryString(param)) {
       paramType = 'QueryString';
-      methodChecker = S2Util.getQueryStringParameter(param, 'method');
-      dataTypeChecker = S2Util.getQueryStringParameter(param, 'dataType');
-      responseTypeChecker = S2Util.getQueryStringParameter(param, 'responseType');
-      disableDefaultErrorHandler = S2Util.getQueryStringParameter(param, 'disableDefaultErrorHandler');
-      timeout = S2Util.getQueryStringParameter(param, 'timeout');
-      showOverlay = S2Util.getQueryStringParameter(param, 'showOverlay');
-      hideLoading = S2Util.getQueryStringParameter(param, 'hideLoading');
-
-      param = S2Util.removeQueryStringParameter(param, 'method');
-      param = S2Util.removeQueryStringParameter(param, 'dataType');
-      param = S2Util.removeQueryStringParameter(param, 'responseType');
-      param = S2Util.removeQueryStringParameter(param, 'disableDefaultErrorHandler');
-      param = S2Util.removeQueryStringParameter(param, 'timeout');
-      param = S2Util.removeQueryStringParameter(param, 'showOverlay');
-      param = S2Util.removeQueryStringParameter(param, 'hideLoading');
+      CONFIG_KEYS.forEach((key) => {
+        config[key] = S2Util.getQueryStringParameter(param, key);
+        param = S2Util.removeQueryStringParameter(param, key);
+      });
       param = param.trim();
     }
 
-    if (typeof methodChecker === 'string' && methodChecker.trim()) {
-      method = methodChecker.toUpperCase();
+    if (typeof config.method === 'string' && config.method.trim()) {
+      method = config.method.toUpperCase();
     }
-    if (typeof dataTypeChecker === 'string' && dataTypeChecker.trim()) {
-      dataType = dataTypeChecker.toUpperCase();
+    if (typeof config.dataType === 'string' && config.dataType.trim()) {
+      dataType = config.dataType.toUpperCase();
     }
-    if (typeof responseTypeChecker === 'string' && responseTypeChecker.trim()) {
-      responseType = responseTypeChecker.toUpperCase();
+    if (typeof config.responseType === 'string' && config.responseType.trim()) {
+      responseType = config.responseType.toUpperCase();
     }
+
+    const disableDefaultErrorHandler = config.disableDefaultErrorHandler;
+    const timeout = config.timeout;
+    const showOverlay = config.showOverlay;
+    const hideLoading = config.hideLoading;
 
     // 타임아웃 설정 (param.timeout 이 없다면 기본 10분)
     let controller;
@@ -351,9 +320,6 @@ export const S2Util = {
             }
             break;
           case 'JSON':
-            if (Object.keys(param).length > 0) {
-              /* empty */
-            }
             option['body'] = dataType === 'JSON' ? JSON.stringify(param) : S2Util.jsonToFormData(param);
             break;
           case 'QueryString':
@@ -1343,7 +1309,7 @@ export const S2Util = {
     }
 
     if (!valid && messageArr.length) {
-      S2Util.alert(messageArr.join('<br/>'), null, { size: 'default' });
+      S2Util.alert(messageArr.join('<br/>'));
     }
 
     return valid;
@@ -2001,126 +1967,206 @@ export const S2Util = {
   },
   /**
    * 커스텀 DOM 기반의 alert 창을 생성하여 메시지를 표시하고, '확인' 버튼 클릭 시 콜백 함수를 실행한다.
-   * 이 함수는 브라우저 기본 alert 창을 대체하며, 스타일링을 위해 'alert' ID와 's2' 클래스를 사용한다.
+   * 이 함수는 Promise를 반환하여 async/await 문법으로 비동기 결과를 받을 수 있으며,
+   * 동시에 기존의 콜백(callback) 방식도 지원하여 하위 호환성을 유지합니다.
    *
    * @param {string} message - 알림창에 표시할 HTML 메시지 문자열.
    * @param {function} [callback] - '확인' 버튼 클릭 시 실행할 콜백 함수.
-   * @returns {void}
+   * @returns {Promise<void>}
    *
    * @example
+   * // async/await 방식
+   * await S2Util.alert('작업이 완료되었습니다.');
+   * console.log('알림 확인 완료');
+   *
+   * // callback 방식
    * S2Util.alert('작업이 완료되었습니다.', function() {
-   * console.log('알림 확인!');
+   *   console.log('알림 확인!');
    * });
    */
   alert(message, callback) {
-    const alertDiv = document.createElement('div');
-    alertDiv.id = 'alert';
-    alertDiv.classList.add('s2');
+    return new Promise((resolve) => {
+      const alertDiv = document.createElement('div');
+      alertDiv.id = 'alert';
+      alertDiv.classList.add('s2');
+      alertDiv.setAttribute('role', 'dialog');
+      alertDiv.setAttribute('aria-modal', 'true');
 
-    const alertElement = document.createElement('div');
+      const alertElement = document.createElement('div');
 
-    const alertWrapper = document.createElement('div');
-    alertWrapper.id = 'alert-wrapper';
+      const alertWrapper = document.createElement('div');
+      alertWrapper.id = 'alert-wrapper';
 
-    const alertTitle = document.createElement('div');
-    alertTitle.id = 'alert-title';
+      const alertTitle = document.createElement('div');
+      alertTitle.id = 'alert-title';
 
-    const span = document.createElement('span');
-    span.innerHTML = message;
+      const span = document.createElement('span');
+      span.innerHTML = message;
 
-    const alertButton = document.createElement('button');
-    alertButton.id = 'alert-button';
-    alertButton.textContent = '확인';
-    alertButton.addEventListener('click', function () {
-      if (typeof callback === 'function') {
-        callback();
-      }
-      document.querySelector('#alert.s2').remove();
+      const alertButton = document.createElement('button');
+      alertButton.id = 'alert-button';
+      alertButton.type = 'button';
+      alertButton.textContent = '확인';
+
+      let settled = false;
+      const closeAlert = () => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        document.removeEventListener('keydown', handleAlertKeydown, true);
+        alertDiv.remove();
+        if (typeof callback === 'function') {
+          callback();
+        }
+        resolve();
+      };
+
+      const handleAlertKeydown = (event) => {
+        if (event.key !== 'Enter' && event.key !== 'Escape') {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        closeAlert();
+      };
+
+      alertButton.addEventListener('click', function () {
+        closeAlert();
+      });
+
+      alertTitle.appendChild(span);
+      alertWrapper.appendChild(alertTitle);
+      alertWrapper.appendChild(alertButton);
+      alertElement.appendChild(alertWrapper);
+      alertDiv.appendChild(alertElement);
+
+      document.body.appendChild(alertDiv);
+      document.addEventListener('keydown', handleAlertKeydown, true);
+      alertButton.focus();
     });
-
-    alertTitle.appendChild(span);
-    alertWrapper.appendChild(alertTitle);
-    alertWrapper.appendChild(alertButton);
-    alertElement.appendChild(alertWrapper);
-    alertDiv.appendChild(alertElement);
-
-    document.body.appendChild(alertDiv);
   },
   /**
    * 커스텀 DOM 기반의 confirm 창을 생성하여 사용자에게 확인 메시지를 표시한다.
-   * 이 함수는 '확인'과 '취소' 버튼을 제공하며, '확인' 버튼 클릭 시에만 콜백 함수를 실행한다.
-   * 스타일링을 위해 'confirm' ID와 's2' 클래스를 사용한다.
+   * 이 함수는 Promise를 반환하여 async/await 문법으로 비동기 결과를 받을 수 있으며,
+   * 동시에 기존의 콜백(callback) 방식도 지원하여 하위 호환성을 유지합니다.
    *
    * @param {string} message - 확인창에 표시할 HTML 메시지 문자열.
    * @param {function} [callback] - '확인' 버튼 클릭 시 실행할 콜백 함수.
-   * @returns {void}
+   * @returns {Promise<boolean>} - 확인 클릭 시 true, 취소 클릭 시 false.
    *
    * @example
+   * // async/await 방식
+   * const isConfirmed = await S2Util.confirm('정말로 삭제하시겠습니까?');
+   * if (isConfirmed) { ... }
+   *
+   * // callback 방식
    * S2Util.confirm('정말로 삭제하시겠습니까?', function() {
-   * console.log('사용자가 확인했습니다.');
+   *   console.log('사용자가 확인했습니다.');
    * });
    */
   confirm(message, callback) {
-    const confirmDiv = document.createElement('div');
-    confirmDiv.id = 'confirm';
-    confirmDiv.classList.add('s2');
-
-    const innerDiv = document.createElement('div');
-
-    const confirmWrapper = document.createElement('div');
-    confirmWrapper.id = 'confirm-wrapper';
-
-    const confirmTitle = document.createElement('div');
-    confirmTitle.id = 'confirm-title';
-
-    const titleSpan = document.createElement('span');
-    titleSpan.innerHTML = message;
-
-    const confirmTitleDesc = document.createElement('div');
-    confirmTitleDesc.id = 'confirm-title-desc';
-
-    const desc = '';
-    let descSpan;
-    if (desc) {
-      descSpan = document.createElement('span');
-      descSpan.innerHTML = message;
+    const existingConfirms = Array.from(document.querySelectorAll('#confirm.s2'));
+    const activeConfirm = existingConfirms.find((element) => element.dataset.s2ManagedConfirm === 'true');
+    if (activeConfirm) {
+      activeConfirm.querySelector('#confirm-button2')?.focus();
+      return Promise.resolve(false);
     }
+    existingConfirms.forEach((element) => element.remove());
 
-    const confirmButtonWrapper = document.createElement('div');
-    confirmButtonWrapper.id = 'confirm-button-wrapper';
+    return new Promise((resolve) => {
+      const confirmDiv = document.createElement('div');
+      confirmDiv.id = 'confirm';
+      confirmDiv.classList.add('s2');
+      confirmDiv.dataset.s2ManagedConfirm = 'true';
+      confirmDiv.setAttribute('role', 'dialog');
+      confirmDiv.setAttribute('aria-modal', 'true');
 
-    const confirmButton1 = document.createElement('button');
-    confirmButton1.id = 'confirm-button1';
-    confirmButton1.textContent = '취소';
-    confirmButton1.addEventListener('click', function () {
-      document.querySelector('#confirm.s2').remove();
-    });
+      const innerDiv = document.createElement('div');
 
-    const confirmButton2 = document.createElement('button');
-    confirmButton2.id = 'confirm-button2';
-    confirmButton2.textContent = '확인';
-    confirmButton2.addEventListener('click', function () {
-      if (typeof callback === 'function') {
-        callback();
+      const confirmWrapper = document.createElement('div');
+      confirmWrapper.id = 'confirm-wrapper';
+
+      const confirmTitle = document.createElement('div');
+      confirmTitle.id = 'confirm-title';
+
+      const titleSpan = document.createElement('span');
+      titleSpan.innerHTML = message;
+
+      const confirmTitleDesc = document.createElement('div');
+      confirmTitleDesc.id = 'confirm-title-desc';
+
+      const desc = '';
+      let descSpan;
+      if (desc) {
+        descSpan = document.createElement('span');
+        descSpan.innerHTML = message;
       }
-      document.querySelector('#confirm.s2').remove();
+
+      const confirmButtonWrapper = document.createElement('div');
+      confirmButtonWrapper.id = 'confirm-button-wrapper';
+
+      const confirmButton1 = document.createElement('button');
+      confirmButton1.id = 'confirm-button1';
+      confirmButton1.type = 'button';
+      confirmButton1.textContent = '취소';
+
+      const confirmButton2 = document.createElement('button');
+      confirmButton2.id = 'confirm-button2';
+      confirmButton2.type = 'button';
+      confirmButton2.textContent = '확인';
+
+      let settled = false;
+      const closeConfirm = (confirmed) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        document.removeEventListener('keydown', handleConfirmKeydown, true);
+        confirmDiv.remove();
+        if (confirmed && typeof callback === 'function') {
+          callback();
+        }
+        resolve(confirmed);
+      };
+
+      const handleConfirmKeydown = (event) => {
+        if (event.key !== 'Enter' && event.key !== 'Escape') {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        closeConfirm(event.key === 'Enter');
+      };
+
+      confirmButton1.addEventListener('click', function () {
+        closeConfirm(false);
+      });
+
+      confirmButton2.addEventListener('click', function () {
+        closeConfirm(true);
+      });
+
+      confirmTitle.appendChild(titleSpan);
+      if (descSpan) {
+        confirmTitleDesc.appendChild(descSpan);
+      }
+      confirmButtonWrapper.appendChild(confirmButton1);
+      confirmButtonWrapper.appendChild(confirmButton2);
+
+      confirmWrapper.appendChild(confirmTitle);
+      confirmWrapper.appendChild(confirmTitleDesc);
+      confirmWrapper.appendChild(confirmButtonWrapper);
+
+      innerDiv.appendChild(confirmWrapper);
+      confirmDiv.appendChild(innerDiv);
+
+      document.body.appendChild(confirmDiv);
+      document.addEventListener('keydown', handleConfirmKeydown, true);
+      confirmButton2.focus();
     });
-
-    confirmTitle.appendChild(titleSpan);
-    if (descSpan) {
-      confirmTitleDesc.appendChild(descSpan);
-    }
-    confirmButtonWrapper.appendChild(confirmButton1);
-    confirmButtonWrapper.appendChild(confirmButton2);
-
-    confirmWrapper.appendChild(confirmTitle);
-    confirmWrapper.appendChild(confirmTitleDesc);
-    confirmWrapper.appendChild(confirmButtonWrapper);
-
-    innerDiv.appendChild(confirmWrapper);
-    confirmDiv.appendChild(innerDiv);
-
-    document.body.appendChild(confirmDiv);
   },
   /**
    * 주어진 HTML 내용을 담는 커스텀 모달 창을 생성하여 화면에 표시한다.
@@ -2148,7 +2194,7 @@ export const S2Util = {
       option = {};
     }
 
-    const modelNo = document.querySelectorAll('.s2modal').length + 1;
+    const modelNo = document.querySelectorAll('.s2-modal').length + 1;
     const modalSelector = `#s2-modal-${modelNo}`;
 
     let modalHeader = '';
@@ -2215,7 +2261,7 @@ export const S2Util = {
    * @param {string} message - 토스트 본문에 표시할 메시지.
    * @param {object} [option] - 토스트 설정 옵션 객체.
    * @param {string} [option.title = '알림'] - 토스트 상단에 표시될 제목.
-   * @param {number} [option.delay = 30000] - 토스트가 화면에 표시될 시간(밀리초).
+   * @param {number} [option.delay = 5000] - 토스트가 화면에 표시될 시간(밀리초).
    * @returns {void}
    *
    * @requires S2Util.uuid
@@ -2252,7 +2298,7 @@ export const S2Util = {
       () => {
         S2Util.hideToast(toastId);
       },
-      option && !isNaN(option.delay) ? option.delay : 3_000
+      option && !isNaN(option.delay) ? option.delay : 5_000
     );
   },
   /**
