@@ -194,7 +194,9 @@ class S2Day {
 
         // 오프셋 토큰 존재 시: 주어진 값(오프셋 지역의 시각)을 UTC 타임스탬프로 변환
         if (hasOffsetToken) {
-          const utcMs = Date.UTC(year, monthIndex, day, hour, minute, second, millisecond) - offsetMinutes * 60000;
+          const utcMs =
+            Date.UTC(year, monthIndex, day, hour, minute, second, millisecond) -
+            offsetMinutes * 60000;
           this._date = new Date(utcMs);
         } else {
           // 로컬 시간 사용
@@ -204,7 +206,9 @@ class S2Day {
         // 유효성 검증
         // - 오프셋 토큰이 있을 경우: 입력은 "오프셋 로컬 시각"이므로, 내부 UTC 타임스탬프에 오프셋을 더해 같은 로컬 시각을 재구성하여 비교
         // - 없을 경우: 기존 로컬 시각 비교
-        const cmpDate = hasOffsetToken ? new Date(this._date.getTime() + offsetMinutes * 60000) : this._date;
+        const cmpDate = hasOffsetToken
+          ? new Date(this._date.getTime() + offsetMinutes * 60000)
+          : this._date;
         const yearGetter = hasOffsetToken ? 'getUTCFullYear' : 'getFullYear';
         const monthGetter = hasOffsetToken ? 'getUTCMonth' : 'getMonth';
         const dateGetter = hasOffsetToken ? 'getUTCDate' : 'getDate';
@@ -214,7 +218,15 @@ class S2Day {
         const msGetter = hasOffsetToken ? 'getUTCMilliseconds' : 'getMilliseconds';
 
         // 날짜 오버플로우 검증 (예: 2025-02-30 -> 2025-03-02 처럼 넘어가는 경우 _isValid를 false로 설정)
-        if (cmpDate[yearGetter]() !== year || cmpDate[monthGetter]() !== monthIndex || cmpDate[dateGetter]() !== day || cmpDate[hourGetter]() !== hour || cmpDate[minuteGetter]() !== minute || cmpDate[secondGetter]() !== second || cmpDate[msGetter]() !== millisecond) {
+        if (
+          cmpDate[yearGetter]() !== year ||
+          cmpDate[monthGetter]() !== monthIndex ||
+          cmpDate[dateGetter]() !== day ||
+          cmpDate[hourGetter]() !== hour ||
+          cmpDate[minuteGetter]() !== minute ||
+          cmpDate[secondGetter]() !== second ||
+          cmpDate[msGetter]() !== millisecond
+        ) {
           this._isValid = false; // 플래그를 false로 설정
         }
       } else if (formatStr) {
@@ -701,7 +713,14 @@ class S2Day {
    */
   startOf(unit, options = undefined) {
     const mode = options && typeof options.tz === 'string' ? options.tz.toLowerCase() : 'local';
-    const off = mode === 'utc' ? 0 : mode === 'offset' ? (typeof options.offsetMinutes === 'number' ? options.offsetMinutes : 0) : null;
+    const off =
+      mode === 'utc'
+        ? 0
+        : mode === 'offset'
+          ? typeof options.offsetMinutes === 'number'
+            ? options.offsetMinutes
+            : 0
+          : null;
 
     if (off === null) {
       const newDate = new Date(this._date);
@@ -791,7 +810,14 @@ class S2Day {
    */
   endOf(unit, options = undefined) {
     const mode = options && typeof options.tz === 'string' ? options.tz.toLowerCase() : 'local';
-    const off = mode === 'utc' ? 0 : mode === 'offset' ? (typeof options.offsetMinutes === 'number' ? options.offsetMinutes : 0) : null;
+    const off =
+      mode === 'utc'
+        ? 0
+        : mode === 'offset'
+          ? typeof options.offsetMinutes === 'number'
+            ? options.offsetMinutes
+            : 0
+          : null;
 
     if (off === null) {
       const newDate = new Date(this._date);
@@ -959,15 +985,67 @@ function _formatDate(date = new Date(), formatString = 'YYYY/MM/DD HH:mm:ss', lo
       weekdays: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
       weekdaysShort: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
       weekdaysMin: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'],
-      months: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
-      monthsShort: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      months: [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December'
+      ],
+      monthsShort: [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec'
+      ]
     },
     ko: {
       weekdays: ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'],
       weekdaysShort: ['일', '월', '화', '수', '목', '금', '토'],
       weekdaysMin: ['일', '월', '화', '수', '목', '금', '토'],
-      months: ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'],
-      monthsShort: ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월']
+      months: [
+        '1월',
+        '2월',
+        '3월',
+        '4월',
+        '5월',
+        '6월',
+        '7월',
+        '8월',
+        '9월',
+        '10월',
+        '11월',
+        '12월'
+      ],
+      monthsShort: [
+        '1월',
+        '2월',
+        '3월',
+        '4월',
+        '5월',
+        '6월',
+        '7월',
+        '8월',
+        '9월',
+        '10월',
+        '11월',
+        '12월'
+      ]
     }
   };
 
@@ -1006,9 +1084,40 @@ function _formatDate(date = new Date(), formatString = 'YYYY/MM/DD HH:mm:ss', lo
   const X = Math.floor(date.getTime() / 1000);
   const x = date.getTime();
 
-  const map = { YYYY, YY, MMMM, MMM, MM, M, DD, D, dddd, ddd, dd, d, A, a, HH, H, hh, h, mm, m, ss, s, SSS, Z, ZZ, X, x };
+  const map = {
+    YYYY,
+    YY,
+    MMMM,
+    MMM,
+    MM,
+    M,
+    DD,
+    D,
+    dddd,
+    ddd,
+    dd,
+    d,
+    A,
+    a,
+    HH,
+    H,
+    hh,
+    h,
+    mm,
+    m,
+    ss,
+    s,
+    SSS,
+    Z,
+    ZZ,
+    X,
+    x
+  };
 
-  return formatString.replace(/YYYY|YY|MMMM|MMM|MM|M|DD|D|dddd|ddd|dd|d|A|a|HH|H|hh|h|mm|m|ss|s|SSS|Z|ZZ|X|x/g, (m) => map[m]);
+  return formatString.replace(
+    /YYYY|YY|MMMM|MMM|MM|M|DD|D|dddd|ddd|dd|d|A|a|HH|H|hh|h|mm|m|ss|s|SSS|Z|ZZ|X|x/g,
+    (m) => map[m]
+  );
 }
 
 /** 문자열을 정규식 리터럴로 이스케이프하는 헬퍼 */

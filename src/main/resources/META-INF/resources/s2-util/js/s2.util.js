@@ -81,7 +81,51 @@ if (typeof String.prototype.dedent !== 'function') {
  *     ...
  * </script>
  */
+
+// S2Util.fetch()의 예약 설정 키(CONFIG_KEYS)별 기대 타입 검증기.
+// 값이 예상 타입과 명백히 다르면(예: timeout에 객체가 들어옴), 실제 데이터 필드명이 예약 키와 우연히
+// 겹쳐 요청에서 제외되었을 가능성이 있다는 신호로 보고 콘솔 경고를 남긴다. (완벽한 충돌 탐지는 불가능)
+const CONFIG_VALUE_VALIDATORS = {
+  method: (v) => v === undefined || v === null || v === '' || typeof v === 'string',
+  dataType: (v) => v === undefined || v === null || v === '' || typeof v === 'string',
+  responseType: (v) => v === undefined || v === null || v === '' || typeof v === 'string',
+  disableDefaultErrorHandler: (v) =>
+    v === undefined ||
+    v === null ||
+    v === '' ||
+    typeof v === 'boolean' ||
+    v === 'true' ||
+    v === 'false',
+  showOverlay: (v) =>
+    v === undefined ||
+    v === null ||
+    v === '' ||
+    typeof v === 'boolean' ||
+    v === 'true' ||
+    v === 'false',
+  hideLoading: (v) =>
+    v === undefined ||
+    v === null ||
+    v === '' ||
+    typeof v === 'boolean' ||
+    v === 'true' ||
+    v === 'false',
+  timeout: (v) => v === undefined || v === null || v === '' || (typeof v !== 'object' && !isNaN(v)),
+  headers: (v) => v === undefined || v === null || (typeof v === 'object' && !Array.isArray(v))
+};
+
+// S2Util.fetch()의 responseType으로 인식되는 값 목록. 이 목록에 없는 값이 들어오면 JSON으로 처리하되 콘솔에 경고를 남긴다.
+const KNOWN_RESPONSE_TYPES = ['JSON', 'BLOB', 'HTML', 'TEXT', 'ARRAY_BUFFER', 'FORM_DATA'];
+
 export const S2Util = {
+  /**
+   * S2Util 내부 디버그 로그(예: fetch 요청 시작/종료 시각) 출력 여부.
+   * 기본값은 false이며, 운영 환경 콘솔을 깨끗하게 유지한다. 필요할 때만 true로 켜서 사용한다.
+   *
+   * @example
+   * S2Util.debug = true; // 이후 S2Util.fetch() 호출 시 시작/종료 로그가 콘솔에 출력된다.
+   */
+  debug: false,
   /**
    * 대상 DOM 요소의 모든 자식 노드를 안전하게 삭제하거나, 주어진 새로운 노드들로 한 번에 대체한다.
    *
@@ -114,7 +158,7 @@ export const S2Util = {
       return null;
     }
 
-    let nodesToInsert = [];
+    const nodesToInsert = [];
 
     // 인자 처리: 새로운 자식 노드 배열 생성
     if (newChildren) {
@@ -216,7 +260,9 @@ export const S2Util = {
 
     if (container) {
       // 텍스트 노드 포함하되, 공백만 있는 텍스트 노드는 제외
-      return Array.from(container.childNodes).filter((n) => !(n.nodeType === Node.TEXT_NODE && !n.textContent.trim()));
+      return Array.from(container.childNodes).filter(
+        (n) => !(n.nodeType === Node.TEXT_NODE && !n.textContent.trim())
+      );
     }
 
     return [];
@@ -225,22 +271,74 @@ export const S2Util = {
    * 자바스크립트의 기본 fetch API를 활용하여 다양한 요청 처리
    *
    * @typedef {object} FetchConfig
-   * @property {'GET'|'POST'|'PUT'|'PATCH'|'DELETE'} [method = 'GET'] 요청 메서드
+   * @property {'GET'|'POST'|'PUT'|'PATCH'|'DELETE'} [method = 'GET'] 요청 메서드. POST/PUT/PATCH는 body에 데이터가 실리고, 그 외(GET/DELETE 등)는 쿼리스트링으로 변환된다.
    * @property {'JSON'|'FORM'} [dataType] 요청 본문(body) 데이터 타입. 'JSON'일 경우 Content-Type: application/json 설정 및 서버 Controller 에서 @RequestBody 로 처리.
-   * @property {'JSON'|'BLOB'|'HTML'} [responseType = 'JSON'] 응답 데이터 타입.
+   * @property {'JSON'|'BLOB'|'HTML'|'TEXT'|'ARRAY_BUFFER'|'FORM_DATA'} [responseType = 'JSON'] 응답 데이터 타입.
+   * JSON: 텍스트로 받은 뒤 JSON이면 파싱, 아니면 문자열 그대로. BLOB: 파일 다운로드(자동으로 다운로드 트리거). HTML/TEXT: 파싱 없이 순수 텍스트.
+   * ARRAY_BUFFER: 다운로드 없이 바이너리를 ArrayBuffer로(이미지 미리보기, base64 인코딩 등 메모리 처리용). FORM_DATA: multipart 응답 파싱.
+   * 인식할 수 없는 값이 들어오면 JSON으로 처리하되 콘솔에 경고를 남긴다.
    * @property {boolean} [disableDefaultErrorHandler = false] 오류 발생 시 기본 오류 핸들링 처리(alert, confirm 등) 비활성화 여부
    * @property {number} [timeout = 600000] 응답 대기 시간 (밀리초). 기본 10분(600000ms).
    * @property {boolean} [showOverlay = false] 응답 대기 로딩 오버레이 표시 여부
    * @property {boolean} [hideLoading = false] 응답 대기 로딩 표시 숨김 여부
+   * @property {object} [headers] 요청에 추가할 커스텀 HTTP 헤더(예: Authorization). 내부 기본 헤더(X-S2-Request, Content-Type)와 병합되며, 동일한 키가 있으면 이 값으로 덮어쓴다.
+   *
+   * ⚠️ 위 속성명(method, dataType, responseType, disableDefaultErrorHandler, timeout, showOverlay, hideLoading, headers)은
+   * fetch 동작 제어를 위해 예약되어 있으므로, param에 이 이름과 동일한 실제 데이터 필드를 담으면 요청 설정값으로 해석되어
+   * 서버로 전송되는 데이터에서 제외된다. 실제 데이터에 이 이름이 필요하다면 서버 측 필드명을 다르게 지정해야 한다.
    *
    * @param {string} url 요청을 보낼 서버 엔드포인트 URL
-   * @param {object|FormData|string} param 요청 설정값(FetchConfig의 속성)과 서버로 전송할 데이터가 담긴 객체 (JSON, FormData, 또는 QueryString 형태)
-   * @param {function(any): void} [success] 요청 성공 시 호출될 콜백 함수. 응답 데이터(JSON/HTML/BLOB URL)를 인자로 받는다.
+   * @param {object|FormData|string} param 요청 설정값(FetchConfig의 속성)과 서버로 전송할 데이터가 담긴 객체 (JSON, FormData, 또는 QueryString 형태).
+   * 이 함수는 param(및 FormData)을 직접 변형하지 않고 내부적으로 복사하여 사용하므로, 호출 후에도 원본을 안전하게 재사용할 수 있다.
+   * @param {function(any): void} [success] 요청 성공 시 호출될 콜백 함수. 응답 데이터(JSON/HTML, BLOB 다운로드 시에는 undefined)를 인자로 받는다.
    * @param {function(Error): void} [fail] 요청 실패 시(HTTP 오류, 타임아웃, 서버 커스텀 오류 등) 호출될 콜백 함수. Error 객체를 인자로 받는다.
-   * @returns {void}
+   * @returns {Promise<any|void>} 요청이 성공하면 응답 데이터(JSON/HTML, BLOB 다운로드 시에는 undefined)로 resolve 되고, 실패하면 Error 로 reject 되는 Promise.
+   * success/fail 콜백을 사용하는 기존 방식과 함께, 반환된 Promise를 이용한 .then/.catch 체이닝 방식 및 async/await 방식도 동일한 Promise를 기반으로 모두 사용할 수 있다.
+   * (콜백 방식 사용 시 처리되지 않은 Promise 거부로 인한 콘솔 경고가 발생하지 않도록 내부적으로 처리된다.)
+   * 반환된 Promise에는 진행 중인 요청을 중도에 취소할 수 있는 abort() 메서드가 함께 붙어있다(예: req.abort()).
+   *
+   * @example
+   * // 1. 콜백 방식
+   * S2Util.fetch('/api/users', { method: 'GET' }, function (data) {
+   *   console.log('조회 성공:', data);
+   * }, function (error) {
+   *   console.error('조회 실패:', error);
+   * });
+   *
+   * // 2. Promise 체이닝 방식 (.then/.catch)
+   * S2Util.fetch('/api/users', { method: 'GET' })
+   *   .then(function (data) {
+   *     console.log('조회 성공:', data);
+   *   })
+   *   .catch(function (error) {
+   *     console.error('조회 실패:', error);
+   *   });
+   *
+   * // 3. Promise async/await 방식
+   * try {
+   *   const data = await S2Util.fetch('/api/users', { method: 'GET' });
+   *   console.log('조회 성공:', data);
+   * } catch (error) {
+   *   console.error('조회 실패:', error);
+   * }
+   *
+   * // 4. 요청 취소 (예: 검색어 입력 시 이전 요청 취소)
+   * let lastRequest;
+   * function search(keyword) {
+   *   if (lastRequest) {
+   *     lastRequest.abort();
+   *   }
+   *   lastRequest = S2Util.fetch('/api/search', { method: 'GET', keyword: keyword });
+   *   return lastRequest;
+   * }
+   *
+   * // 5. 커스텀 헤더 추가
+   * S2Util.fetch('/api/users', { method: 'GET', headers: { Authorization: 'Bearer ' + token } });
    */
   fetch(url, param, success, fail) {
-    console.debug('fetch start:', new Date());
+    if (S2Util.debug) {
+      console.debug('fetch start:', new Date());
+    }
     const option = {
       headers: {
         'X-S2-Request': 's2-fetch'
@@ -248,7 +346,16 @@ export const S2Util = {
     };
 
     // fetch() 전용 설정 키(FormData/JSON/QueryString 매개변수에서 분리되어 fetch 동작을 제어하는 값들)
-    const CONFIG_KEYS = ['method', 'dataType', 'responseType', 'disableDefaultErrorHandler', 'timeout', 'showOverlay', 'hideLoading'];
+    const CONFIG_KEYS = [
+      'method',
+      'dataType',
+      'responseType',
+      'disableDefaultErrorHandler',
+      'timeout',
+      'showOverlay',
+      'hideLoading',
+      'headers'
+    ];
 
     let paramType = '';
     let method = 'GET';
@@ -258,12 +365,21 @@ export const S2Util = {
 
     if (S2Util.isFormData(param)) {
       paramType = 'FormData';
+      // 호출자가 전달한 원본 FormData를 변형하지 않도록 복사본을 만들어 사용한다.
+      const paramCopy = new FormData();
+      param.forEach((value, key) => paramCopy.append(key, value));
+      param = paramCopy;
+
       CONFIG_KEYS.forEach((key) => {
         config[key] = param.get(key);
         param.delete(key);
       });
     } else if (S2Util.isJSON(param)) {
       paramType = 'JSON';
+      // 호출자가 전달한 원본 객체를 변형하지 않도록 얕은 복사본을 만들어 사용한다.
+      // (원본이 배열이면 복사본도 배열로 유지해야 이후 JSON.stringify 결과 형태가 원본과 동일하게 유지된다.)
+      param = Array.isArray(param) ? [...param] : { ...param };
+
       CONFIG_KEYS.forEach((key) => {
         config[key] = param[key];
         delete param[key];
@@ -276,6 +392,18 @@ export const S2Util = {
       });
       param = param.trim();
     }
+
+    // 예약 키(CONFIG_KEYS)에 기대 타입과 명백히 다른 값이 들어온 경우, 설정이 아니라 실제 데이터 필드명이
+    // 우연히 겹쳐 요청에서 제외되었을 가능성을 개발자가 알아챌 수 있도록 경고한다.
+    // (예: method 필드에 문자열이 들어오면 실제 요청 메서드인지 데이터인지 구분할 수 없어 완벽하게 잡아내지는 못한다.)
+    Object.keys(CONFIG_VALUE_VALIDATORS).forEach((key) => {
+      if (!CONFIG_VALUE_VALIDATORS[key](config[key])) {
+        console.warn(
+          `S2Util.fetch: '${key}'는 요청 동작 제어를 위해 예약된 이름입니다. 전달된 값(${JSON.stringify(config[key])})의 타입이 예상과 달라, ` +
+            `서버로 보내려던 데이터 필드가 이 이름과 겹쳐 요청에서 제외되었을 가능성이 있습니다. 실제 데이터라면 다른 필드명을 사용하세요.`
+        );
+      }
+    });
 
     if (typeof config.method === 'string' && config.method.trim()) {
       method = config.method.toUpperCase();
@@ -291,19 +419,28 @@ export const S2Util = {
     const timeout = config.timeout;
     const showOverlay = config.showOverlay;
     const hideLoading = config.hideLoading;
+    const customHeaders = config.headers;
 
     // 타임아웃 설정 (param.timeout 이 없다면 기본 10분)
     let controller;
     let timeoutId;
+    let timedOut = false;
     if (typeof AbortController !== 'undefined') {
       controller = new AbortController();
       option.signal = controller.signal;
-      timeoutId = setTimeout(() => controller.abort(), timeout && !isNaN(timeout) ? timeout : 600000);
+      timeoutId = setTimeout(
+        () => {
+          timedOut = true;
+          controller.abort();
+        },
+        timeout && !isNaN(timeout) ? timeout : 600000
+      );
     }
 
     switch (method) {
       case 'POST':
       case 'PUT':
+      case 'PATCH':
         if (dataType === 'JSON') {
           // JSON 데이터를 전달하는 경우
           // 서버 Controller 에서 @RequestBody 로 처리
@@ -316,11 +453,13 @@ export const S2Util = {
         switch (paramType) {
           case 'FormData':
             if (!param.keys().next().done) {
-              option['body'] = dataType === 'JSON' ? JSON.stringify(S2Util.formDataToJson(param)) : param;
+              option['body'] =
+                dataType === 'JSON' ? JSON.stringify(S2Util.formDataToJson(param)) : param;
             }
             break;
           case 'JSON':
-            option['body'] = dataType === 'JSON' ? JSON.stringify(param) : S2Util.jsonToFormData(param);
+            option['body'] =
+              dataType === 'JSON' ? JSON.stringify(param) : S2Util.jsonToFormData(param);
             break;
           case 'QueryString':
             if (param) {
@@ -354,13 +493,19 @@ export const S2Util = {
         break;
     }
 
-    option['method'] = method;
-
-    if (hideLoading !== true && hideLoading !== 'true') {
-      showS2Loading({ showOverlay: showOverlay });
+    if (customHeaders && typeof customHeaders === 'object') {
+      // 커스텀 헤더(예: Authorization)를 병합한다. 동일한 키가 있으면 커스텀 헤더 값으로 덮어쓴다.
+      Object.assign(option['headers'], customHeaders);
     }
 
-    fetch(url, option)
+    option['method'] = method;
+
+    let loadingToken;
+    if (hideLoading !== true && hideLoading !== 'true') {
+      loadingToken = showS2Loading({ showOverlay: showOverlay });
+    }
+
+    const requestPromise = fetch(url, option)
       .then((response) => {
         if (!response.ok) {
           // HTTP 상태 코드가 2xx 범위가 아닌 경우 오류
@@ -371,7 +516,8 @@ export const S2Util = {
             error.statusText = response.statusText;
             try {
               if (S2Util.isJSON(errorData)) {
-                const jsonErrorData = typeof errorData === 'string' ? JSON.parse(errorData) : errorData;
+                const jsonErrorData =
+                  typeof errorData === 'string' ? JSON.parse(errorData) : errorData;
                 error.body = jsonErrorData;
 
                 if (jsonErrorData.error) {
@@ -400,6 +546,12 @@ export const S2Util = {
           type: responseType
         };
 
+        if (result.type && !KNOWN_RESPONSE_TYPES.includes(result.type)) {
+          console.warn(
+            `S2Util.fetch: 인식할 수 없는 responseType '${result.type}' 입니다. JSON으로 처리합니다. 지원되는 값: ${KNOWN_RESPONSE_TYPES.join(', ')}`
+          );
+        }
+
         switch (result.type) {
           case 'BLOB': {
             let filename = '';
@@ -422,12 +574,22 @@ export const S2Util = {
             break;
           }
           case 'HTML':
+          case 'TEXT':
             result['data'] = response.text();
             break;
+          case 'ARRAY_BUFFER':
+            result['data'] = response.arrayBuffer();
+            break;
+          case 'FORM_DATA':
+            result['data'] = response.formData();
+            break;
+          case 'JSON':
           default:
             result['data'] = response.text().then((text) => {
               // 텍스트로 먼저 받고 내용이 있을 때만 파싱
-              return text && S2Util.isJSON(text) && typeof text === 'string' ? JSON.parse(text) : text;
+              return text && S2Util.isJSON(text) && typeof text === 'string'
+                ? JSON.parse(text)
+                : text;
             });
             break;
         }
@@ -436,7 +598,7 @@ export const S2Util = {
       })
       .then((result) => {
         if (result.type === 'BLOB') {
-          result.data.then((data) => {
+          return result.data.then((data) => {
             const url = window.URL.createObjectURL(data);
             const link = document.createElement('a');
             link.href = url;
@@ -449,58 +611,68 @@ export const S2Util = {
             if (success && typeof success === 'function') {
               success();
             }
+            return undefined;
           });
-        } else {
-          result.data.then((data) => {
-            if (!data) {
-              // 데이터가 없는 경우(Void 응답)도 성공으로 처리
-              if (success && typeof success === 'function') {
-                success();
-              }
-              return;
-            }
+        }
 
-            if (S2Util.isJSON(data)) {
-              let ok = true;
-              if (Object.prototype.hasOwnProperty.call(data, 'status')) {
-                if (typeof data.status === 'string') {
-                  ok = data.status === 'SUCCESS';
-                } else if (S2Util.isJSON(data.status)) {
-                  ok = data.status.result === 'SUCCESS';
-                }
-              }
-
-              if (!ok) {
-                const error = new Error('Result error!');
-                error.status = data.status;
-                error.message = S2Util.isJSON(data.status) && data.status.message ? data.status.message : data.message || '오류가 발생했습니다.';
-                throw error;
-              }
-            }
-
+        return result.data.then((data) => {
+          if (!data) {
+            // 데이터가 없는 경우(Void 응답)도 성공으로 처리
             if (success && typeof success === 'function') {
-              success(data);
+              success();
             }
-          });
-        }
+            return undefined;
+          }
 
-        {
-          // .finally (ES2018) 대체
-          if (hideLoading !== true && hideLoading !== 'true') {
-            hideS2Loading();
+          if (S2Util.isJSON(data)) {
+            let ok = true;
+            if (Object.prototype.hasOwnProperty.call(data, 'status')) {
+              if (typeof data.status === 'string') {
+                ok = data.status === 'SUCCESS';
+              } else if (S2Util.isJSON(data.status)) {
+                ok = data.status.result === 'SUCCESS';
+              }
+            }
+
+            if (!ok) {
+              const error = new Error('Result error!');
+              error.status = data.status;
+              error.message =
+                S2Util.isJSON(data.status) && data.status.message
+                  ? data.status.message
+                  : data.message || '오류가 발생했습니다.';
+              throw error;
+            }
           }
-          if (timeoutId) {
-            clearTimeout(timeoutId); // 완료 시 타임아웃 해제
+
+          if (success && typeof success === 'function') {
+            success(data);
           }
-          console.debug('fetch end:', new Date());
-          return result;
+          return data;
+        });
+      })
+      .then((data) => {
+        // .finally (ES2018) 대체
+        if (hideLoading !== true && hideLoading !== 'true') {
+          hideS2Loading(loadingToken);
         }
+        if (timeoutId) {
+          clearTimeout(timeoutId); // 완료 시 타임아웃 해제
+        }
+        if (S2Util.debug) {
+          console.debug('fetch end:', new Date());
+        }
+        return data;
       })
       .catch((error) => {
         if (disableDefaultErrorHandler !== true && disableDefaultErrorHandler !== 'true') {
           if (error.name === 'AbortError') {
-            S2Util.showToast('요청 시간이 초과되었습니다.');
-          } else if (typeof error.message === 'string' && (error.message.startsWith('S2Exception:') || error.message.startsWith('S2RuntimeException:'))) {
+            S2Util.showToast(timedOut ? '요청 시간이 초과되었습니다.' : '요청이 취소되었습니다.');
+          } else if (
+            typeof error.message === 'string' &&
+            (error.message.startsWith('S2Exception:') ||
+              error.message.startsWith('S2RuntimeException:'))
+          ) {
             S2Util.showToast(error.message);
           } else if (error.status === 401) {
             S2Util.confirm('인증이 필요합니다.<br/>로그인 페이지로 이동하시겠습니까?', function () {
@@ -514,7 +686,9 @@ export const S2Util = {
             if (!errorMessage) {
               errorMessage = error.message ? error.message : error.body;
             }
-            S2Util.showToast(errorMessage && errorMessage.length < 100 ? errorMessage : '오류가 발생했습니다.');
+            S2Util.showToast(
+              errorMessage && errorMessage.length < 100 ? errorMessage : '오류가 발생했습니다.'
+            );
           }
         }
 
@@ -525,15 +699,31 @@ export const S2Util = {
         {
           // .finally (ES2018) 대체
           if (hideLoading !== true && hideLoading !== 'true') {
-            hideS2Loading();
+            hideS2Loading(loadingToken);
           }
           if (timeoutId) {
             clearTimeout(timeoutId); // 완료 시 타임아웃 해제
           }
-          console.debug('fetch end:', new Date());
+          if (S2Util.debug) {
+            console.debug('fetch end:', new Date());
+          }
           throw error;
         }
       });
+
+    // 콜백 방식(success/fail)만 사용하고 반환된 Promise를 사용하지 않는 기존 호출부에서
+    // 'Uncaught (in promise)' 콘솔 경고가 발생하지 않도록 별도의 no-op catch를 붙여둔다.
+    // (requestPromise 자체는 그대로 반환되므로, 호출부에서 await/then/catch로 정상적으로 사용할 수 있다.)
+    requestPromise.catch(() => {});
+
+    // 반환된 Promise에 진행 중인 요청을 취소할 수 있는 abort() 메서드를 부여한다.
+    requestPromise.abort = () => {
+      if (controller) {
+        controller.abort();
+      }
+    };
+
+    return requestPromise;
   },
   /**
    * HTML 문자열 또는 템플릿 ID를 받아 데이터를 치환하여 HTML을 생성한다.
@@ -566,7 +756,9 @@ export const S2Util = {
    */
   template(targetTemplate, data) {
     let resultHtml = '';
-    let template = document.getElementById(targetTemplate) ? document.getElementById(targetTemplate).innerHTML : targetTemplate;
+    let template = document.getElementById(targetTemplate)
+      ? document.getElementById(targetTemplate).innerHTML
+      : targetTemplate;
     const propsArr = data && Array.isArray(data) ? data : [data];
 
     if (template) {
@@ -579,13 +771,22 @@ export const S2Util = {
             // 템플릿 변수 치환
             for (const key in props) {
               const value = props[key];
-              replacedHtml = replacedHtml.replace(new RegExp(`{{=${key}}}`, 'g'), value || value === 0 ? value : '');
+              // key에 정규식 특수문자(., (, ) 등)가 포함되어 있어도 리터럴 그대로 매칭되도록 이스케이프한다.
+              const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              replacedHtml = replacedHtml.replace(
+                new RegExp(`{{=${escapedKey}}}`, 'g'),
+                value || value === 0 ? value : ''
+              );
             }
 
             const trimmedHtml = replacedHtml.trim();
-            const htmlPrefix = trimmedHtml.substring(0, Math.min(trimmedHtml.length, 7)).toLowerCase();
+            const htmlPrefix = trimmedHtml
+              .substring(0, Math.min(trimmedHtml.length, 7))
+              .toLowerCase();
 
-            const resultContainer = document.createElement(htmlPrefix.startsWith('<tr') ? 'tbody' : 'div');
+            const resultContainer = document.createElement(
+              htmlPrefix.startsWith('<tr') ? 'tbody' : 'div'
+            );
             S2Util.replaceChildren(resultContainer, trimmedHtml);
 
             const elements = resultContainer.querySelectorAll('[if], [else]');
@@ -628,6 +829,18 @@ export const S2Util = {
         });
       }
     }
+    // props에 매칭되지 않아 남아있는 {{=key}}는 빈 문자열로 치환한다. 다만 오타를 조용히 숨기지 않도록,
+    // 매칭되지 않은 플레이스홀더가 있었다면 어떤 key인지 콘솔에 경고로 남긴다.
+    const unmatchedKeys = resultHtml.match(/{{=([^}}]+)}}/g);
+    if (unmatchedKeys) {
+      const uniqueUnmatchedKeys = [
+        ...new Set(unmatchedKeys.map((placeholder) => placeholder.replace(/^{{=|}}$/g, '')))
+      ];
+      console.warn(
+        `S2Util.template: 다음 플레이스홀더가 데이터와 매칭되지 않아 빈 문자열로 치환되었습니다(오타 여부를 확인하세요): ${uniqueUnmatchedKeys.join(', ')}`
+      );
+    }
+
     return resultHtml.replace(/({{=([^}}]+)}})/g, '');
   },
   /**
@@ -648,7 +861,8 @@ export const S2Util = {
     if (!option) {
       return;
     }
-    const target = typeof option.target === 'string' ? document.querySelector(option.target) : option.target;
+    const target =
+      typeof option.target === 'string' ? document.querySelector(option.target) : option.target;
     if (target) {
       if (!option.clear) {
         while (target.firstChild) {
@@ -669,8 +883,13 @@ export const S2Util = {
           const itemLabel = String(option.itemLabel);
 
           // 값 및 레이블 계산 로직 (기존 로직 유지)
-          const value = itemValue.match(/{{=([^}}]+)}}/) ? S2Util.template(itemValue, item) : item[itemValue];
-          const label = itemLabel && itemLabel.match(/{{=([^}}]+)}}/) ? S2Util.template(itemLabel, item) : item[itemLabel];
+          const value = itemValue.match(/{{=([^}}]+)}}/)
+            ? S2Util.template(itemValue, item)
+            : item[itemValue];
+          const label =
+            itemLabel && itemLabel.match(/{{=([^}}]+)}}/)
+              ? S2Util.template(itemLabel, item)
+              : item[itemLabel];
 
           // <option> 요소 생성
           const optionElement = document.createElement('option');
@@ -936,6 +1155,12 @@ export const S2Util = {
     // 매개변수 설정
     if (param && typeof param === 'object') {
       for (const paramKey in param) {
+        // method는 위에서 이미 setAttribute로 폼에 반영했다. actionFormElement['method']는 hidden input이 아니라
+        // 폼의 네이티브 method 문자열 속성이므로, 여기서 그대로 처리하면 문자열에 .value를 대입하려다 TypeError가 발생한다.
+        if (paramKey === 'method') {
+          continue;
+        }
+
         const paramVal = param[paramKey];
 
         if (paramVal) {
@@ -1049,20 +1274,28 @@ export const S2Util = {
         if (checkList.length > 0) {
           for (const check of checkList) {
             const type = element.type;
-            const datepickerElement = formElement.querySelector(`.datepicker[name="${element.getAttribute('name')}_text"]`);
-            const title = element.getAttribute('title') || (datepickerElement && datepickerElement.getAttribute('title'));
+            const datepickerElement = formElement.querySelector(
+              `.datepicker[name="${element.getAttribute('name')}_text"]`
+            );
+            const title =
+              element.getAttribute('title') ||
+              (datepickerElement && datepickerElement.getAttribute('title'));
             let checkValid = true;
             let checkMessage = '';
 
             switch (check) {
               case 'required':
                 if (type === 'checkbox') {
-                  const checkedBoxes = formElement.querySelectorAll(`[type=checkbox][name="${element.name}"]:checked`);
+                  const checkedBoxes = formElement.querySelectorAll(
+                    `[type=checkbox][name="${element.name}"]:checked`
+                  );
                   if (checkedBoxes.length === 0) {
                     checkValid = false;
                   }
                 } else if (type === 'radio') {
-                  const checkedRadios = formElement.querySelectorAll(`[type=radio][name="${element.name}"]:checked`);
+                  const checkedRadios = formElement.querySelectorAll(
+                    `[type=radio][name="${element.name}"]:checked`
+                  );
                   if (checkedRadios.length === 0) {
                     checkValid = false;
                   }
@@ -1073,7 +1306,11 @@ export const S2Util = {
                 if (!checkValid) {
                   valid = false;
                   checkMessage = `[${title}]${errMsaSuf1}`;
-                  S2Util.setFormErrorMessage(checkMessage, formElement.querySelector(`[data-form-error="${element.name}"]`), messageArr);
+                  S2Util.setFormErrorMessage(
+                    checkMessage,
+                    formElement.querySelector(`[data-form-error="${element.name}"]`),
+                    messageArr
+                  );
                 }
                 break;
 
@@ -1083,7 +1320,9 @@ export const S2Util = {
                 const length = Number(element.getAttribute(check).replace(/[^0-9]/g, ''));
                 if (length) {
                   if (type === 'checkbox') {
-                    const checkedCount = formElement.querySelectorAll(`[type=checkbox][name="${element.name}"]:checked`).length;
+                    const checkedCount = formElement.querySelectorAll(
+                      `[type=checkbox][name="${element.name}"]:checked`
+                    ).length;
                     if (check === 'length' && length !== checkedCount) {
                       checkValid = false;
                       checkMessage = `[${title}]은(는) ${length}개를 선택해야 합니다.`;
@@ -1110,7 +1349,11 @@ export const S2Util = {
 
                   if (!checkValid) {
                     valid = false;
-                    S2Util.setFormErrorMessage(checkMessage, formElement.querySelector(`[data-form-error="${element.name}"]`), messageArr);
+                    S2Util.setFormErrorMessage(
+                      checkMessage,
+                      formElement.querySelector(`[data-form-error="${element.name}"]`),
+                      messageArr
+                    );
                   }
                 }
                 break;
@@ -1125,7 +1368,9 @@ export const S2Util = {
                     case 'checkbox':
                       break;
                     case 'radio': {
-                      const checkedRadio = formElement.querySelector(`[type=radio][name="${element.name}"]:checked`);
+                      const checkedRadio = formElement.querySelector(
+                        `[type=radio][name="${element.name}"]:checked`
+                      );
                       if (checkedRadio) value = checkedRadio.value;
                       break;
                     }
@@ -1137,7 +1382,11 @@ export const S2Util = {
                   if (value !== '$undefined' && minValue > value) {
                     valid = false;
                     checkMessage = `[${title}]은(는) ${minValue}보다 적을수 없습니다.`;
-                    S2Util.setFormErrorMessage(checkMessage, formElement.querySelector(`[data-form-error="${element.name}"]`), messageArr);
+                    S2Util.setFormErrorMessage(
+                      checkMessage,
+                      formElement.querySelector(`[data-form-error="${element.name}"]`),
+                      messageArr
+                    );
                   }
                 }
                 break;
@@ -1194,7 +1443,11 @@ export const S2Util = {
                   if (value && !mask.test(value)) {
                     valid = false;
                     checkMessage = `[${title}]${errMsaSuf2}`;
-                    S2Util.setFormErrorMessage(checkMessage, formElement.querySelector(`[data-form-error="${element.name}"]`), messageArr);
+                    S2Util.setFormErrorMessage(
+                      checkMessage,
+                      formElement.querySelector(`[data-form-error="${element.name}"]`),
+                      messageArr
+                    );
                   }
                 }
                 break;
@@ -1241,18 +1494,27 @@ export const S2Util = {
                         } else {
                           // 날짜 범위 (start/end) 검사
                           if (dataTypeInfo[1] && dataTypeInfo[1].indexOf('start') === 0) {
-                            const endDateElement = formElement.querySelector(`[dataType="date:end${dataTypeInfo[1].replace('start', '')}"]`);
+                            const endDateElement = formElement.querySelector(
+                              `[dataType="date:end${dataTypeInfo[1].replace('start', '')}"]`
+                            );
 
                             if (endDateElement) {
                               const endDateValue = endDateElement.value;
                               const endDateString = String(endDateValue).replace(/[^0-9]/g, '');
                               let s2EndDate;
 
-                              if (endDateString.length === 8) s2EndDate = S2Date(endDateString, 'YYYYMMDD');
-                              else if (endDateString.length === 6) s2EndDate = S2Date(endDateString, 'YYYYMM');
+                              if (endDateString.length === 8)
+                                s2EndDate = S2Date(endDateString, 'YYYYMMDD');
+                              else if (endDateString.length === 6)
+                                s2EndDate = S2Date(endDateString, 'YYYYMM');
 
                               // endDate가 비어있지 않고, (s2EndDate가 생성되었고) 유효하며, 시작일이 종료일보다 늦을 때
-                              if (endDateValue.trim() && s2EndDate && s2EndDate.isValid() && s2StartDate.toDate() > s2EndDate.toDate()) {
+                              if (
+                                endDateValue.trim() &&
+                                s2EndDate &&
+                                s2EndDate.isValid() &&
+                                s2StartDate.toDate() > s2EndDate.toDate()
+                              ) {
                                 checkValid = false;
                                 checkMessage = `[${endDateElement.getAttribute('title')}]은(는) [${title}]보다 빠를수 없습니다.`;
                               }
@@ -1262,7 +1524,11 @@ export const S2Util = {
 
                         if (!checkValid) {
                           valid = false;
-                          S2Util.setFormErrorMessage(checkMessage, formElement.querySelector(`[data-form-error="${element.name}"]`), messageArr);
+                          S2Util.setFormErrorMessage(
+                            checkMessage,
+                            formElement.querySelector(`[data-form-error="${element.name}"]`),
+                            messageArr
+                          );
                         }
                         break;
                       }
@@ -1298,7 +1564,11 @@ export const S2Util = {
                   valid = false;
                   const emptyElement = formElement.querySelector(`[name="${emptyGroupNm}"]`);
                   checkMessage = `[${emptyElement ? emptyElement.getAttribute('title') : ''}] 항목을 입력해주세요.`;
-                  this.setFormErrorMessage(checkMessage, formElement.querySelector(`[data-form-error="${element.name}"]`), messageArr);
+                  S2Util.setFormErrorMessage(
+                    checkMessage,
+                    formElement.querySelector(`[data-form-error="${element.name}"]`),
+                    messageArr
+                  );
                 }
                 break;
               }
@@ -1603,7 +1873,9 @@ export const S2Util = {
       return queryString;
     }
 
-    const params = new URLSearchParams(queryString.startsWith('?') ? queryString.slice(1) : queryString);
+    const params = new URLSearchParams(
+      queryString.startsWith('?') ? queryString.slice(1) : queryString
+    );
     params.delete(key);
     return params.toString();
   },
@@ -1676,7 +1948,8 @@ export const S2Util = {
 
     const paramJSONType = S2Util.s2DataType(paramJSON);
     if (paramJSONType.type === 'json') {
-      const paramJSONObject = paramJSONType.detailType === 'string' ? JSON.parse(paramJSON) : paramJSON;
+      const paramJSONObject =
+        paramJSONType.detailType === 'string' ? JSON.parse(paramJSON) : paramJSON;
 
       if (Object.keys(vJSONObject).length > 0) {
         // 기존 쿼리문자열로 생성한 JSON 객체가 있다면 변환할 JSON 을 추가하여 둘사이에 중복된 키값을 제거한다.
@@ -2068,7 +2341,9 @@ export const S2Util = {
    */
   confirm(message, callback) {
     const existingConfirms = Array.from(document.querySelectorAll('#confirm.s2'));
-    const activeConfirm = existingConfirms.find((element) => element.dataset.s2ManagedConfirm === 'true');
+    const activeConfirm = existingConfirms.find(
+      (element) => element.dataset.s2ManagedConfirm === 'true'
+    );
     if (activeConfirm) {
       activeConfirm.querySelector('#confirm-button2')?.focus();
       return Promise.resolve(false);
@@ -2275,7 +2550,7 @@ export const S2Util = {
 
     const tempContainer = document.createElement('div');
     tempContainer.innerHTML = `
-            <div class="s2-toast" id="${toastId}" class="toast-sty01 no-select">
+            <div class="s2-toast toast-sty01 no-select" id="${toastId}">
                 <div class="flex-sty04">
                     <strong class="ma-r10">${option && option.title ? option.title : '알림'}</strong>
                     <a href="#" class="fa-close close-sty02 btn-close-s2-toast" data-toast-id="${toastId}"><span class="close-btn" aria-label="닫기"></span></a>
@@ -2444,11 +2719,11 @@ export const S2Util = {
    * @example
    * // 단일 요소 (한국식 포맷)
    * const singleElement = document.querySelector('.counter');
-   * const singleCounter = animateNumber(singleElement, { duration: 3000 }); // 3초 후 자동 종료
+   * const singleCounter = S2Util.animateNumber(singleElement, { duration: 3000 }); // 3초 후 자동 종료
    *
    * // 다중 요소 (미국식 포맷)
    * const multipleElements = document.querySelectorAll('.counter');
-   * const multiCounter = animateNumber(multipleElements, {
+   * const multiCounter = S2Util.animateNumber(multipleElements, {
    *   duration: 3000,
    *   locale: 'de-DE' // 유럽식 포맷
    * }); // 3초 후 자동 종료
@@ -2464,18 +2739,24 @@ export const S2Util = {
     };
 
     // 1. 객체 전개 구문 ({...}) 대신 Object.assign() 사용 (ES6)
-    var settings = Object.assign({}, defaultOptions, options);
+    const settings = Object.assign({}, defaultOptions, options);
 
     // 2. 옵셔널 체이닝 (?.) 대신 명시적인 조건문 사용
     // options && Number.isFinite(options.duration) 로직으로 대체
-    settings.duration = options && Number.isFinite(options.duration) ? options.duration : defaultOptions.duration;
+    settings.duration =
+      options && Number.isFinite(options.duration) ? options.duration : defaultOptions.duration;
 
     // options && typeof options.locale === 'string' 로직으로 대체
     settings.locale = options && typeof options.locale === 'string' ? options.locale : null;
 
     // 단일 요소를 배열로 변환
     // Array.from()은 ES6 문법입니다.
-    const elementArray = elements instanceof NodeList ? Array.from(elements) : Array.isArray(elements) ? elements : [elements];
+    const elementArray =
+      elements instanceof NodeList
+        ? Array.from(elements)
+        : Array.isArray(elements)
+          ? elements
+          : [elements];
 
     // 각 요소별 애니메이션 상태 관리
     const animations = elementArray.map(() => ({ frameId: null }));
@@ -2541,12 +2822,12 @@ export const S2Util = {
    *
    * @async
    * @param {string} publicKey - VAPID Public Key (Base64URL 형식).
+   * @param {string} [userId] - 구독 캐시 키에 포함할 사용자 식별자. 지정하면 사용자별로 당일 구독 여부를 구분한다.
    * @returns {void}
    *
    * @requires S2Util.getLocalStorage
    * @requires S2Util.setLocalStorage
    * @requires S2Util.urlBase64ToUint8Array
-   * @requires S2Util.confirm (선택적)
    *
    * @example
    * S2Util.subscribeServiceWorker('BObv3x9...');
@@ -2556,9 +2837,6 @@ export const S2Util = {
       const SUBSCRIPTION_STORAGE_KEY = 's2-subscription-data';
       const lastSubscriptionData = S2Util.getLocalStorage(SUBSCRIPTION_STORAGE_KEY);
       const subscriptionCacheKey = S2Date().format('YYYYMMDD') + (userId ? `-${userId}` : '');
-
-      // 알림 컨펌 사용 여부 ("구노에서 알림 받기를 수락하시겠습니까?")
-      const isOpenNotificationConfirm = false;
 
       if (!publicKey) {
         console.debug('Public key 가 없습니다.');
@@ -2572,22 +2850,17 @@ export const S2Util = {
       try {
         let confirmResult = !!lastSubscriptionData;
 
-        const registration = await navigator.serviceWorker.register('/public/js/service-worker.s2.js', { scope: '/public/js/' }).then((reg) => {
-          reg.update();
-          return reg;
-        });
+        const registration = await navigator.serviceWorker
+          .register('/public/js/service-worker.s2.js', { scope: '/public/js/' })
+          .then((reg) => {
+            reg.update();
+            return reg;
+          });
 
         if (!confirmResult) {
-          // 기존 구독 정보가 전혀 없다면 구독 여부를 확인한다.
-          confirmResult = await new Promise((resolve) => {
-            if (isOpenNotificationConfirm) {
-              S2Util.confirm('구노에서 알림 받기를 수락하시겠습니까?', function () {
-                resolve(true);
-              });
-            } else {
-              resolve(true);
-            }
-          });
+          // 기존 구독 정보가 전혀 없는 첫 구독이라도 별도 컨펌 없이 바로 구독을 진행한다.
+          // (컨펌을 다시 받고 싶다면 이 자리에서 S2Util.confirm(...)으로 confirmResult를 설정하면 된다.)
+          confirmResult = true;
         }
 
         if (confirmResult) {
@@ -2636,7 +2909,9 @@ export const S2Util = {
         }
       });
     } else {
-      console.error('Service Worker 이벤트를 등록할 수 없습니다.\nnavigator.serviceWorker 또는 addEventListener가 지원되지 않습니다.');
+      console.error(
+        'Service Worker 이벤트를 등록할 수 없습니다.\nnavigator.serviceWorker 또는 addEventListener가 지원되지 않습니다.'
+      );
     }
   }
 };
@@ -2650,22 +2925,31 @@ export const S2Util = {
  *     document.addEventListener('DOMContentLoaded', initializeS2DomEvents);
  * </script>
  */
+// initializeS2DomEvents()가 여러 번 호출되어도(예: ajax로 페이지 일부를 교체한 뒤 재초기화하는 패턴)
+// document/body에 위임된 전역 리스너와 XMLHttpRequest.prototype.open 패치가 중복 등록되지 않도록 막는 플래그.
+let g_s2DomEventsInitialized = false;
+
 export const initializeS2DomEvents = () => {
-  document.body.addEventListener('click', (event) => {
-    const element = event.target;
-    // 기본 동작을 막는 조건 설정(클릭시 상단으로 스크롤 되는 동작 방지)
-    const shouldPreventDefault = element.tagName.toLowerCase() === 'a' || (element.tagName.toLowerCase() === 'input' && element.type === 'submit') || element.tagName.toLowerCase() === 'button';
+  if (!g_s2DomEventsInitialized) {
+    g_s2DomEventsInitialized = true;
 
-    if (shouldPreventDefault) {
-      // onClick 이벤트를 큐에 넣어 나중에 실행되도록 함
-      setTimeout(() => {
-        event.preventDefault(); // 기본 동작 방지
-        // event.stopPropagation(); // 이벤트 버블링 방지
-      }, 0); // 0ms 딜레이를 주어 after the current call stack runs
-    }
-  });
+    document.body.addEventListener('click', (event) => {
+      const element = event.target;
+      // 기본 동작을 막는 조건 설정(클릭시 상단으로 스크롤 되는 동작 방지)
+      const shouldPreventDefault =
+        element.tagName.toLowerCase() === 'a' ||
+        (element.tagName.toLowerCase() === 'input' && element.type === 'submit') ||
+        element.tagName.toLowerCase() === 'button';
 
-  {
+      if (shouldPreventDefault) {
+        // onClick 이벤트를 큐에 넣어 나중에 실행되도록 함
+        setTimeout(() => {
+          event.preventDefault(); // 기본 동작 방지
+          // event.stopPropagation(); // 이벤트 버블링 방지
+        }, 0); // 0ms 딜레이를 주어 after the current call stack runs
+      }
+    });
+
     document.addEventListener('ajaxStart', () => {
       // const spinner = document.createElement('div');
       // spinner.id = 'ui-gSpinner';
@@ -2721,15 +3005,7 @@ export const initializeS2DomEvents = () => {
           const functionName = optionArr[0];
 
           if (window[functionName] && typeof window[functionName] === 'function') {
-            if (optionArr.length > 1) {
-              let actionString = `window["${functionName}"](${optionArr
-                .slice(1)
-                .map((param) => `"${param}"`)
-                .join(', ')});`;
-              new Function(actionString)();
-            } else {
-              window[functionName]();
-            }
+            window[functionName](...optionArr.slice(1));
           }
           e.preventDefault();
         }
@@ -2740,7 +3016,7 @@ export const initializeS2DomEvents = () => {
   // input:text[alphabetNumber] 요소 입력 정규화
   document.querySelectorAll('input[type="text"][alphabetNumber]').forEach((element) => {
     element.addEventListener('keyup', () => {
-      element.value = element.value.replace(/[^a-zA-Z0-9:_\\.\\-]/gi, '');
+      element.value = element.value.replace(/[^a-zA-Z0-9:_.-]/gi, '');
     });
   });
 
@@ -2779,21 +3055,21 @@ export const initializeS2DomEvents = () => {
   // input:text[engOnly] 요소 입력 정규화
   document.querySelectorAll('input[type="text"][engOnly]').forEach((element) => {
     element.addEventListener('keyup', () => {
-      element.value = element.value.replace(/[^a-zA-Z0-9\\s]/gi, '');
+      element.value = element.value.replace(/[^a-zA-Z0-9\s]/gi, '');
     });
   });
 
   // input:text[datetime] 요소 입력 정규화
   document.querySelectorAll('input[type="text"][datetime]').forEach((element) => {
     element.addEventListener('keyup', () => {
-      element.value = element.value.replace(/[^0-9:\\-]/gi, '');
+      element.value = element.value.replace(/[^0-9:-]/gi, '');
     });
   });
 
   // input:text[phoneNumber] 요소 입력 정규화
   document.querySelectorAll('input[type="text"][phoneNumber]').forEach((element) => {
     element.addEventListener('keyup', () => {
-      element.value = element.value.replace(/[^0-9\\-]/gi, '');
+      element.value = element.value.replace(/[^0-9-]/gi, '');
     });
   });
 
@@ -2820,6 +3096,12 @@ export const initializeS2DomEvents = () => {
     if (!header.querySelector('> .fas.fa-sort')) {
       header.innerHTML += '<i class="fas fa-sort"></i>';
     }
+
+    if (header.dataset.s2SortBound === 'true') {
+      // initializeS2DomEvents()가 다시 호출되어도 같은 헤더에 클릭 리스너가 중복 등록되지 않도록 방지한다.
+      return;
+    }
+    header.dataset.s2SortBound = 'true';
 
     header.addEventListener('click', () => {
       const table = header.closest('table');
