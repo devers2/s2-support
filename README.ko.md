@@ -28,9 +28,11 @@
 
 ---
 
-## 🚀 설치 (Installation)
+## 🚀 빠른 시작 가이드 (Quick Start)
 
-`build.gradle`에 다음 의존성을 추가합니다.
+### 1. 설치 (Installation)
+
+`build.gradle` 또는 `pom.xml`에 다음 의존성을 추가합니다.
 
 **[Gradle]**
 
@@ -48,6 +50,35 @@ dependencies {
     <artifactId>s2-support</artifactId>
     <version>1.1.3</version>
 </dependency>
+```
+
+### 2. 주요 사용법 (Usage Examples)
+
+#### 페이징 (`S2PaginationInfo`)
+
+```java
+S2PaginationInfo pagination = new S2PaginationInfo();
+pagination.setCurrentPageNo(1);
+pagination.setRecordCountPerPage(10);
+pagination.setPageSize(5);
+pagination.setTotalRecordCount(150);
+
+int offset = pagination.getFirstRecordIndex(); // 0
+```
+
+#### Spring 컨텍스트 접근 (`S2ContextUtil`)
+
+```java
+// 애플리케이션 어디서나 Spring 빈을 정적으로 조회
+MyService service = S2ContextUtil.getBean(MyService.class);
+```
+
+#### JSON 헬퍼 (`S2JsonUtil`)
+
+```java
+// 간편한 객체 직렬화 및 역직렬화
+String json = S2JsonUtil.toJson(myObject);
+MyDto dto = S2JsonUtil.fromJson(json, MyDto.class);
 ```
 
 ---
@@ -75,7 +106,7 @@ s2-support Version: 1.1.3 (2026-09-09)
 
 ---
 
-**특정 기능을 사용하려면 런타임에 다음 의존성을 엔드유저 프로젝트에 명시적으로 추가해야 합니다.** 이 의존성이 누락되면 런타임에 `java.lang.NoClassDefFoundError`가 발생합니다.
+**특정 기능(예: S2BindValidator)을 사용하려면 런타임에 다음 의존성을 엔드유저 프로젝트에 명시적으로 추가해야 합니다.** 이 의존성이 누락되면 런타임에 `java.lang.NoClassDefFoundError`가 발생합니다.
 
 **[Gradle 사용자]**
 

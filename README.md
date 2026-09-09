@@ -28,9 +28,11 @@
 
 ---
 
-## 🚀 Installation
+## 🚀 Quick Start
 
-Add the following dependency to your `build.gradle`.
+### 1. Installation
+
+Add the following dependency to your `build.gradle` or `pom.xml`.
 
 **[Gradle]**
 
@@ -48,6 +50,35 @@ dependencies {
     <artifactId>s2-support</artifactId>
     <version>1.1.3</version>
 </dependency>
+```
+
+### 2. Usage Examples
+
+#### Pagination (`S2PaginationInfo`)
+
+```java
+S2PaginationInfo pagination = new S2PaginationInfo();
+pagination.setCurrentPageNo(1);
+pagination.setRecordCountPerPage(10);
+pagination.setPageSize(5);
+pagination.setTotalRecordCount(150);
+
+int offset = pagination.getFirstRecordIndex(); // 0
+```
+
+#### Spring Context Access (`S2ContextUtil`)
+
+```java
+// Access Spring-managed beans statically anywhere in your application
+MyService service = S2ContextUtil.getBean(MyService.class);
+```
+
+#### JSON Helpers (`S2JsonUtil`)
+
+```java
+// Fast serialization and deserialization
+String json = S2JsonUtil.toJson(myObject);
+MyDto dto = S2JsonUtil.fromJson(json, MyDto.class);
 ```
 
 ---
