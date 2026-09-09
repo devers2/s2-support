@@ -108,6 +108,7 @@ extra["dynamicSourceInfoMap"] = mapOf(
     "licensesInfo" to mapOf(
         "licenses" to listOf(
             "README.md",
+            "README.ko.md",
             "LICENSE",
             "licenses/LICENSE-APACHE-2.0",
             "licenses/LICENSE-EPL-2.0",
@@ -234,6 +235,7 @@ S2BuildUtils.updateCopyright(
         resourcesSrcRoot,
         "src/main/webapp",
         "README.md",
+        "README.ko.md",
         "build.gradle.kts"
     )
 )
@@ -274,9 +276,9 @@ S2BuildUtils.registerCopyDependenciesTask(project)
 
 
 // --------------------------------------------------------------------------------------
-// README 파일 버전 & 의존성 가이드 업데이트
+// README 파일 버전 & 의존성 가이드 업데이트 (정규식 패턴 문자열로 전달)
 // --------------------------------------------------------------------------------------
-S2BuildUtils.updateReadmeWithVersionAndDependencies(project, file("README.md"))
+S2BuildUtils.updateReadmeWithVersionAndDependencies(project, "^README(\\..+)?\\.md$")
 
 
 // ========================================================================

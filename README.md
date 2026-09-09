@@ -1,44 +1,63 @@
 # S2 Support Library
 
----
+[English](README.md) | [한국어](README.ko.md)
 
-## Overview (개요)
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.devers2.internal/s2-support?color=brightgreen&label=Maven%20Central)](https://central.sonatype.com/artifact/io.github.devers2.internal/s2-support)
+[![Java 17+](https://img.shields.io/badge/Java-17%2B-blue?logo=openjdk)](https://openjdk.org/)
+[![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg)](./LICENSE)
 
-### [English]
-
-A personal utility library providing various helper classes for Java applications. Built on top of s2-core and s2-validator.
-
-### [한국어]
-
-Java 애플리케이션을 위한 다양한 헬퍼 클래스를 제공하는 개인 유틸리티 라이브러리입니다. s2-core 및 s2-validator 기반으로 작성되었습니다.
+> An **opinionated companion library** providing a curated collection of helper classes and convenience utilities built on top of `s2-core` and `s2-validator`.  
+> Primarily designed to streamline **personal development workflows** and support recurring application patterns across author-specific projects.
 
 ---
 
-## Installation (설치)
+## 📖 Overview
+
+`s2-support` consolidates frequently used helper modules and boilerplate reductions tailored to practical Java/Spring application development. It covers file management, pagination, Spring context utilities, JSON/encryption/image helpers, and more.
+
+---
+
+## ✨ Key Utilities
+
+- **📁 File Management** — Local and remote (SFTP/JSch) file operations via `FileManager`, `S2File`, `S2RemoteFile`
+- **📄 Pagination** — Ready-to-use `S2PaginationInfo`, `S2PaginationTag`, and `S2SearchVO` for list/search UIs
+- **🍃 Spring Utilities** — `S2ContextUtil`, `S2AutoConfiguration`, `S2AnnotationResolver`, `S2RestApiUtil` for Spring-based apps
+- **🔧 General Helpers** — `S2JsonUtil`, `S2HashUtil`, `S2EncryptionUtil`, `S2ImageUtil`, `S2TypeUtil`, `S2CollectionUtil`, `S2StreamUtil`, `S2ServletUtil`, `S2QueryStringUtil`, `S2Uuid`
+- **🗂️ Data Structures** — `S2LruMap` (LRU cache backed by `LinkedHashMap`)
+
+---
+
+## 🚀 Installation
 
 Add the following dependency to your `build.gradle`.
 
+**[Gradle]**
+
 ```groovy
 dependencies {
-    implementation 'io.github.devers2.internal:s2-support:1.0.6'
+    implementation 'io.github.devers2.internal:s2-support:1.1.3'
 }
 ```
 
-## ⚙️ Requirements (요구사항)
+**[Maven]**
 
-### [English]
+```xml
+<dependency>
+    <groupId>io.github.devers2.internal</groupId>
+    <artifactId>s2-support</artifactId>
+    <version>1.1.3</version>
+</dependency>
+```
+
+---
+
+## ⚙️ Requirements
 
 This project is built with **JDK 21**, but it can be used reliably in all environments running **Java 17 or higher**.
-
-### [한국어]
-
-본 프로젝트는 **JDK 21** 환경에서 빌드되었으나, **Java 17 이상**의 모든 환경에서 안정적으로 사용할 수 있습니다.
 
 ---
 
 ## 📜 License & Copyright
-
-### [English]
 
 This library is provided under the **Apache License 2.0**. You are free to use, modify, and distribute this software, provided that you comply with the obligations of the license (such as copyright notice and source code disclosure requirements). For detailed terms and conditions, please refer to the **[LICENSE](./LICENSE)** file.
 
@@ -47,17 +66,9 @@ This library is provided under the **Apache License 2.0**. You are free to use, 
 
 **Third-party Notice:** This project uses external libraries. For detailed third-party license notices, please refer to the **[licenses/NOTICE](./licenses/NOTICE)** file.
 
-### [한국어]
-
-본 라이브러리는 **Apache License 2.0** 하에 제공됩니다. 사용자는 라이선스의 의무 사항(저작권 고지, 소스 코드 공개 범위 등)을 준수하는 조건 하에 자유롭게 사용, 수정 및 재배포가 가능합니다. 상세한 조건은 **[LICENSE](./LICENSE)** 파일을 반드시 확인해 주세요.
-
-- **저작권 2020 - 2026 devers2 (이승수, 대한민국 대전)**
-- 문의: [eseungsu.dev@gmail.com](mailto:eseungsu.dev@gmail.com)
-
-**제3자 라이브러리 고지:** 본 프로젝트는 외부 라이브러리를 사용합니다. 상세한 제3자 라이브러리 고지사항은 **[licenses/NOTICE](./licenses/NOTICE)** 파일을 참조해 주세요.
-
 ---
 
+s2-support Version: 1.1.3 (2026-09-09)
 
 [//]: # 'S2_DEPS_INFO_START'
 
