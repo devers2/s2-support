@@ -52,22 +52,30 @@ dependencies {
 </dependency>
 ```
 
-#### 선택적 확장 모듈 (`s2-validator` & `s2-jpa`)
+#### 선택적 확장 모듈 (`s2-validator`, `s2-validator-plugin`, `s2-jpa`)
 
 > [!NOTE]
 > `s2-support`는 핵심 모듈인 **`s2-core`**를 `api` 전이 의존성으로 기본 포함하고 있으므로, 고성능 리플렉션, 지능형 캐시, 날짜/문자열 유틸리티 등은 별도 선언 없이 즉시 사용할 수 있습니다.
 
 애플리케이션 요구사항에 따라 **[S2Util 제품군](https://github.com/devers2/s2-util)**의 동반 모듈을 선택적으로 추가하여 기능을 확장할 수 있습니다:
 
-| 모듈 | 의존성 (Artifact) | 주요 특징 및 기능 |
+| 모듈 | 유형 및 좌표 | 주요 특징 및 기능 |
 | :--- | :--- | :--- |
-| **`s2-validator`** | `io.github.devers2:s2-validator:1.1.7` | **서버/클라이언트 크로스 플랫폼 통합 검증**<br>• Java에서 작성한 검증 규칙을 클라이언트(JavaScript `s2.validator.js`)와 완벽 동기화.<br>• 30여 종 기본 규칙(이메일, 연락처, 날짜 등) 및 한국어 조사 자동 보정(`{0|은/는}`).<br>• Fluent 체이닝 API, 조건부 검증(`when`/`and`), 중첩/컬렉션 객체 검증 지원.<br>• `S2BindValidator`를 통한 Spring MVC `BindingResult` 완벽 연동. |
-| **`s2-jpa`** | `io.github.devers2:s2-jpa:1.1.7` | **JPA 동적 JPQL 쿼리 빌더**<br>• `S2Jpql` 및 `{{=key}}` 플레이스홀더를 활용한 템플릿 기반 동적 쿼리 생성.<br>• 조건부 파라미터 및 절 바인딩(`bindClause`, `bindParameter`, `bindOrderBy`).<br>• `LikeMode`(ANYWHERE, START, END)를 통한 안전한 LIKE 검색 및 인젝션 방지. |
-| **`s2-util`** *(통합 번들)* | `io.github.devers2:s2-util:1.1.7` | **올인원 전체 유틸리티 제품군**<br>• `s2-core`, `s2-validator`, `s2-jpa`를 모두 포함하여 모든 기능을 한 번에 사용하고 싶을 때 권장. |
+| **`s2-validator`** | 라이브러리<br>`io.github.devers2:s2-validator:1.1.7` | **서버/클라이언트 크로스 플랫폼 통합 검증**<br>• Java에서 작성한 검증 규칙을 클라이언트(JavaScript `s2.validator.js`)와 완벽 동기화.<br>• 30여 종 기본 규칙(이메일, 연락처, 날짜 등) 및 한국어 조사 자동 보정(`{0|은/는}`).<br>• Fluent 체이닝 API, 조건부 검증(`when`/`and`), 중첩/컬렉션 객체 검증 지원.<br>• `S2BindValidator`를 통한 Spring MVC `BindingResult` 완벽 연동. |
+| **`s2-validator-plugin`** | Gradle 플러그인<br>`id 'io.github.devers2.validator' version '1.1.2'` | **빌드 시점 DTO 필드 오타 검증** *(`s2-validator`의 동반 플러그인)*<br>• AST 기반 정적 코드 분석으로 빌드 시점(`compileJava`)에 필드 유효성 검사.<br>• `S2Validator.<DTO>builder().field("...")`에 지정된 필드가 실제 DTO에 존재하는지 검사하여 오타나 리팩토링 누락을 빌드 오류로 사전에 차단.<br>• 별도 설정 없는 Zero-Configuration 지원 (Gradle 전용). |
+| **`s2-jpa`** | 라이브러리<br>`io.github.devers2:s2-jpa:1.1.7` | **JPA 동적 JPQL 쿼리 빌더**<br>• `S2Jpql` 및 `{{=key}}` 플레이스홀더를 활용한 템플릿 기반 동적 쿼리 생성.<br>• 조건부 파라미터 및 절 바인딩(`bindClause`, `bindParameter`, `bindOrderBy`).<br>• `LikeMode`(ANYWHERE, START, END)를 통한 안전한 LIKE 검색 및 인젝션 방지. |
+| **`s2-util`** *(통합 번들)* | 라이브러리<br>`io.github.devers2:s2-util:1.1.7` | **올인원 전체 유틸리티 제품군**<br>• `s2-core`, `s2-validator`, `s2-jpa`를 모두 포함하여 모든 기능을 한 번에 사용하고 싶을 때 권장. |
 
-**Gradle 의존성 설정 예시:**
+**Gradle 설정 예시:**
 
 ```groovy
+// build.gradle
+plugins {
+    id 'java'
+    // [선택] S2Validator 빌드 시점 오타 방지 플러그인 (Gradle 전용)
+    id 'io.github.devers2.validator' version '1.1.2'
+}
+
 dependencies {
     // 기본: s2-support (s2-core 자동 포함)
     implementation 'io.github.devers2.internal:s2-support:1.1.3'
