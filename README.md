@@ -52,6 +52,62 @@ dependencies {
 </dependency>
 ```
 
+#### Optional Companion Modules (`s2-validator` & `s2-jpa`)
+
+> [!NOTE]
+> `s2-support` automatically includes **`s2-core`** as an `api` (transitive) dependency, so core reflection, caching, date/string, and thread utilities are immediately available out-of-the-box.
+
+Depending on your application's requirements, you can optionally include companion modules from the **[S2Util Suite](https://github.com/devers2/s2-util)**:
+
+| Module | Dependency | Key Features & Purpose |
+| :--- | :--- | :--- |
+| **`s2-validator`** | `io.github.devers2:s2-validator:1.1.7` | **Cross-Platform Dynamic Validator**<br>• Author validation rules once in Java and synchronize seamlessly with client-side JavaScript (`s2.validator.js`).<br>• 30+ built-in rules (email, phone, date, etc.) with smart Korean particle interpolation (`{0|은/는}`).<br>• Fluent chaining API, conditional validation (`when`/`and`), nested/collection object validation.<br>• Seamless Spring MVC integration via `S2BindValidator` (`BindingResult`). |
+| **`s2-jpa`** | `io.github.devers2:s2-jpa:1.1.7` | **Dynamic JPQL Query Builder**<br>• Template-based dynamic query construction using `S2Jpql` with `{{=key}}` placeholders.<br>• Fluent conditional parameter and clause binding (`bindClause`, `bindParameter`, `bindOrderBy`).<br>• Safe LIKE search with `LikeMode` (ANYWHERE, START, END) preventing injection. |
+| **`s2-util`** *(Bundle)* | `io.github.devers2:s2-util:1.1.7` | **All-in-One Suite**<br>• Full bundle containing `s2-core`, `s2-validator`, and `s2-jpa` together if you prefer adding all utilities at once. |
+
+**Example Dependency Setup (Gradle):**
+
+```groovy
+dependencies {
+    // Base: s2-support (s2-core is included automatically)
+    implementation 'io.github.devers2.internal:s2-support:1.1.3'
+
+    // [Optional] Server & Client Unified Validation
+    implementation 'io.github.devers2:s2-validator:1.1.7'
+
+    // [Optional] Dynamic JPQL Queries
+    implementation 'io.github.devers2:s2-jpa:1.1.7'
+
+    // Or simply use the full bundle instead of individual modules:
+    // implementation 'io.github.devers2:s2-util:1.1.7'
+}
+```
+
+**Example Dependency Setup (Maven):**
+
+```xml
+<!-- Base: s2-support (s2-core is included automatically) -->
+<dependency>
+    <groupId>io.github.devers2.internal</groupId>
+    <artifactId>s2-support</artifactId>
+    <version>1.1.3</version>
+</dependency>
+
+<!-- [Optional] s2-validator -->
+<dependency>
+    <groupId>io.github.devers2</groupId>
+    <artifactId>s2-validator</artifactId>
+    <version>1.1.7</version>
+</dependency>
+
+<!-- [Optional] s2-jpa -->
+<dependency>
+    <groupId>io.github.devers2</groupId>
+    <artifactId>s2-jpa</artifactId>
+    <version>1.1.7</version>
+</dependency>
+```
+
 ### 2. Usage Examples
 
 #### Pagination (`S2PaginationInfo`)
@@ -113,7 +169,6 @@ s2-support Version: 1.1.3 (2026-09-09)
 ```groovy
 dependencies {
     // Essential runtime dependencies for optional functionalities
-    implementation 'io.github.devers2:s2-core:1.1.7'
     implementation 'org.springframework:spring-context:6.1.1'
     implementation 'org.springframework:spring-web:6.1.1'
     implementation 'org.springframework.integration:spring-integration-sftp:6.1.1'

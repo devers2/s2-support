@@ -307,11 +307,12 @@ dependencies {
     implementation(libs.uuid.creator)
 
     /**
-     * compileOnly: 컴파일 시 사용함
-     * - 런타임 시 사용하지 않는 라이브러리인 경우 이 방식을 사용함
-     * - Shadow JAR 생성 시 포함되지 않음
+     * api: 컴파일 및 런타임 시 모두 사용하며, 소비자 프로젝트에도 transitive dependency로 노출됨
+     * - s2-support 전체에서 핵심적으로 사용 (26개 파일, 80+ import)하므로 반드시 런타임에 필요함
+     * - api로 선언함으로써 소비자가 s2-core를 별도로 선언하지 않아도 자동으로 포함됨
+     * - JAR 크기에는 영향 없음 (Shadow 플러그인 미사용 상태이므로 번들링 없이 POM에만 기록됨)
      */
-    compileOnly(libs.s2.core)
+    api(libs.s2.core)
     compileOnly(libs.spring6.context) // Java 17 이상으로 개발하므로 Spring 6 및 Spring Boot 3 계열이 표준
     compileOnly(libs.spring6.web) // Java 17 이상으로 개발하므로 Spring 6 및 Spring Boot 3 계열이 표준
     compileOnly(libs.spring.integration.sftp)
