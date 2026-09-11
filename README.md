@@ -1,4 +1,4 @@
-# S2 Support Library
+# s2-support — Opinionated Application Utilities
 
 🌐 **English** | [한국어](README.ko.md)
 
@@ -7,7 +7,7 @@
 [![Java 17+](https://img.shields.io/badge/Java-17%2B-blue?logo=openjdk)](https://openjdk.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg)](./LICENSE)
 
-> An **opinionated companion library** providing a curated collection of helper classes and convenience utilities built on top of `s2-core` and `s2-validator`.  
+> An **opinionated companion library** providing a curated collection of helper classes and convenience utilities built on top of `s2-core` and `s2-validator`.
 > Primarily designed to streamline **personal development workflows** and support recurring application patterns across author-specific projects.
 
 ---
@@ -57,7 +57,7 @@ dependencies {
 > [!NOTE]
 > `s2-support` automatically includes **`s2-core`** as an `api` (transitive) dependency, so core reflection, caching, date/string, and thread utilities are immediately available out-of-the-box.
 
-Depending on your application's requirements, you can optionally include companion modules from the **[S2Util Suite](https://github.com/devers2/s2-util)**:
+Depending on your application's requirements, you can optionally include companion modules from the **[s2-util suite](https://github.com/devers2/s2-util)**:
 
 | Module | Type & Coordinates | Key Features & Purpose |
 | :--- | :--- | :--- |
@@ -184,6 +184,8 @@ dependencies {
     implementation 'jakarta.servlet:jakarta.servlet-api:6.1.0'
     implementation 'jakarta.servlet.jsp:jakarta.servlet.jsp-api:4.0.0'
     implementation 'org.aspectj:aspectjweaver:1.9.25.1'
+    implementation 'org.jsoup:jsoup:1.23.2'
+    implementation 'io.github.openhtmltopdf:openhtmltopdf-pdfbox:1.1.85'
 }
 ```
 

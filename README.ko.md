@@ -1,4 +1,4 @@
-# S2 Support Library
+# s2-support — 실무 보조 유틸리티 라이브러리
 
 🌐 [English](README.md) | **한국어**
 
@@ -57,7 +57,7 @@ dependencies {
 > [!NOTE]
 > `s2-support`는 핵심 모듈인 **`s2-core`**를 `api` 전이 의존성으로 기본 포함하고 있으므로, 고성능 리플렉션, 지능형 캐시, 날짜/문자열 유틸리티 등은 별도 선언 없이 즉시 사용할 수 있습니다.
 
-애플리케이션 요구사항에 따라 **[S2Util 제품군](https://github.com/devers2/s2-util)**의 동반 모듈을 선택적으로 추가하여 기능을 확장할 수 있습니다:
+애플리케이션 요구사항에 따라 **[s2-util 제품군](https://github.com/devers2/s2-util)**의 동반 모듈을 선택적으로 추가하여 기능을 확장할 수 있습니다:
 
 | 모듈 | 유형 및 좌표 | 주요 특징 및 기능 |
 | :--- | :--- | :--- |
@@ -184,6 +184,8 @@ dependencies {
     implementation 'jakarta.servlet:jakarta.servlet-api:6.1.0'
     implementation 'jakarta.servlet.jsp:jakarta.servlet.jsp-api:4.0.0'
     implementation 'org.aspectj:aspectjweaver:1.9.25.1'
+    implementation 'org.jsoup:jsoup:1.23.2'
+    implementation 'io.github.openhtmltopdf:openhtmltopdf-pdfbox:1.1.85'
 }
 ```
 

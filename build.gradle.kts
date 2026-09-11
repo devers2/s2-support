@@ -95,14 +95,30 @@ extra["javaVersion"] = JavaVersion.VERSION_21
 extra["releaseCompatibility"] = JavaVersion.VERSION_17
 
 /*
- * [추가 소스 목록]
- * dynamicSourceInfoMap에 정의된 기능 키(예: 'S2PdfUtil')를 추가하여 관련된 소스 파일 및 라이브러리 의존성을 빌드에 자동으로 포함시킬 수 있다.
+ * ========================================================================
+ * ⭐ [동적 기능 활성화 설정 (Active Features Toggle)]
+ * ========================================================================
+ * 아래 'dynamicSourceInfoMap'에 정의된 기능 키(예: 'S2PdfUtil', 'licensesInfo')를
+ * 'activeFeatures' Set에 추가하면, 해당 기능에 매핑된:
+ *   1) 소스 파일 (sources: 예, S2PdfUtil.java)
+ *   2) 라이브러리 의존성 (dependencies: 예, jsoup, openhtmltopdf-pdfbox)
+ *   3) 라이선스 문서 (licenses: 예, README-LGPL-2.1-PDF.md)
+ * 가 빌드 파이프라인에 자동으로 활성화(포함)되어 컴파일 및 패키징됩니다.
+ *
+ * 💡 반대로 'activeFeatures'에서 해당 기능 키를 제외(제거)하면:
+ *   - 관련 소스 파일과 라이브러리 의존성, 라이선스가 빌드에서 완전히 비활성화(제외)되어
+ *   - 특정 대용량 의존성이나 불필요한 서드파티 라이브러리를 배제한 초경량 배포용 아티팩트를 구성할 수 있습니다.
+ *
+ * 설정 예시)
+ *   - S2PdfUtil 포함 (기본값): setOf("licensesInfo", "S2PdfUtil")
+ *   - S2PdfUtil 제외 (경량화): setOf("licensesInfo")
  */
-extra["activeFeatures"] = setOf("licensesInfo")
+extra["activeFeatures"] = setOf("licensesInfo", "S2PdfUtil")
 
 /**
- * [동적 기능 소스 정보 (Feature Toggles)]
- * - 특정 기능(Feature)에 포함될 소스 파일과 라이선스 정보 정의
+ * [동적 기능 소스 정보 (Feature Toggles Definition)]
+ * - 각 기능(Feature) 키별로 결합될 소스 파일(sources), 라이브러리 의존성(dependencies), 라이선스(licenses) 정보 정의
+ * - 'activeFeatures'에 등록된 키의 항목들만 선별적으로 빌드 파이프라인에 동적 주입됨
  */
 extra["dynamicSourceInfoMap"] = mapOf(
     "licensesInfo" to mapOf(
@@ -124,26 +140,20 @@ extra["dynamicSourceInfoMap"] = mapOf(
          * OpenHTML to PDF (LGPL 2.1) - S2Pdf 관련 의존성으로 LGPL 2.1 라이선스 준수를 위해 compileOnly로 사용(Shadow/Bundle 방지)
          * 최종 사용자가 의존성을 직접 추가해야 하며 Shadow JAR에서 쉐이딩/번들링 되지 않도록 방지해야 함
          */
-        "variantId" to "pdf",
+        /* "variantId" to "pdf", */
         "sources" to listOf("io/github/devers2/s2util/support/S2PdfUtil.java"),
         "dependencies" to listOf(
             mapOf( // (jsoup은 MIT이지만 openhtmltopdf와 함께 동작하므로 동일하게 처리)
                 "configuration" to "compileOnly",
                 "group" to "org.jsoup",
                 "name" to "jsoup",
-                "version" to "1.18.3"
-            ),
-            mapOf( // LGPL 2.1 라이선스
-                "configuration" to "compileOnly",
-                "group" to "io.github.openhtmltopdf",
-                "name" to "openhtmltopdf-core",
-                "version" to "1.1.24"
+                "version" to "1.23.2"
             ),
             mapOf( // LGPL 2.1 라이선스
                 "configuration" to "compileOnly",
                 "group" to "io.github.openhtmltopdf",
                 "name" to "openhtmltopdf-pdfbox",
-                "version" to "1.1.24"
+                "version" to "1.1.85"
             )
         ),
         "licenses" to listOf("README-LGPL-2.1-PDF.md")
@@ -329,4 +339,6 @@ dependencies {
     testRuntimeOnly(libs.junit.jupiter.engine)
     testRuntimeOnly(libs.junit.platform.launcher)
     testImplementation(libs.s2.core)
+    testImplementation("org.jsoup:jsoup:1.23.2")
+    testImplementation("io.github.openhtmltopdf:openhtmltopdf-pdfbox:1.1.85")
 }

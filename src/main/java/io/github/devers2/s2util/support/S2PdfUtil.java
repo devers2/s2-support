@@ -1,0 +1,2457 @@
+/**
+ * S2 Support Library
+ *
+ * Copyright 2020 - 2026 devers2 (이승수, Daejeon, Korea)
+ * Contact: eseungsu.dev@gmail.com
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * For more information, please see the LICENSE file in the root directory.
+ */
+package io.github.devers2.s2util.support;
+
+import java.awt.image.BufferedImage;
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
+import java.util.regex.Pattern;
+
+import javax.imageio.ImageIO;
+
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.io.IOUtils;
+import org.apache.pdfbox.multipdf.PDFMergerUtility;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.font.PDFont;
+import org.apache.pdfbox.pdmodel.font.PDType0Font;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
+import org.apache.pdfbox.rendering.ImageType;
+import org.apache.pdfbox.rendering.PDFRenderer;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Entities;
+import org.jsoup.parser.Parser;
+
+import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
+
+import io.github.devers2.s2util.core.S2StringUtil;
+import io.github.devers2.s2util.core.S2ThreadUtil;
+import io.github.devers2.s2util.core.S2Util;
+import io.github.devers2.s2util.exception.S2RuntimeException;
+import io.github.devers2.s2util.file.S2ResourceInputStream;
+import io.github.devers2.s2util.log.S2LogManager;
+import io.github.devers2.s2util.log.S2Logger;
+import io.github.devers2.s2util.support.S2FileUtil;
+import io.github.devers2.s2util.support.S2StreamUtil;
+import io.github.devers2.s2util.support.S2Uuid;
+
+/**
+ * <h1>S2PdfUtil (고성능 PDF 엔진 & 범용 멀티 포맷 병합기)</h1>
+ * <p>
+ * HTML, 이미지(PNG/JPG/GIF/WebP/BMP), 일반 텍스트, SVG 및 원격 URL 리소스를 고품질 PDF 문서로 변환하고,<br>
+ * 다중 이종(異種) 문서 소스를 사용자가 지정한 순서 그대로 메모리 누수 없이 단일 PDF로 병합(Merge)하는 유틸리티 클래스입니다.
+ * </p>
+ *
+ * <h2>✨ 핵심 기능 요약 (Key Features)</h2>
+ * <ul>
+ *   <li><b>HTML &rarr; PDF 변환:</b> 외부 CSS 파일, TTF/OTF 폰트, 인라인 Base64 이미지 및 CSS background-image 완벽 지원</li>
+ *   <li><b>범용 다중 포맷 병합 (Universal Merge):</b> PDF, HTML, 이미지, 텍스트, SVG, URL 소스를 원하는 순서대로 1개의 PDF로 결합</li>
+ *   <li><b>원격 URL 비동기 분산 프리페치 (Async Distributed Pre-fetch):</b> 복수의 URL 소스를 {@link S2ThreadUtil#getCommonExecutor()} 기반
+ *       백그라운드 병렬 다운로드하여 네트워크 대기 시간을 최소화하면서도, 원래의 리스트 순서를 100% 보장 결합</li>
+ *   <li><b>메모리 및 자원 누수 제로 (Zero Leak Architecture):</b>
+ *     <ul>
+ *       <li>대용량 병합 시 PDFBox 디스크 캐시(createTempFileOnlyStreamCache) 사용으로 JVM Heap OOM 원천 방지</li>
+ *       <li>변환 시 사용된 중간 임시 파일은 성공/실패 여부와 무관하게 즉시 삭제 + deleteOnExit 2중 안전장치 적용</li>
+ *       <li>최종 결과는 {@link S2ResourceInputStream}으로 반환되어 호출자가 {@code close()} 시 결과 임시 파일 자동 삭제</li>
+ *       <li>이미지 렌더링 후 {@link java.awt.image.BufferedImage#flush()}를 호출하여 네이티브 메모리 버퍼 즉시 해제</li>
+ *     </ul>
+ *   </li>
+ *   <li><b>PDF &rarr; 이미지 변환 (Preview / Thumbnail):</b> 고해상도 DPI 지정 및 다중 페이지 콜백 렌더링 지원</li>
+ *   <li><b>페이지 번호 자동 각인 (Page Numbering):</b> 원하는 위치 및 TTF 폰트로 "1 / N" 형식 페이지 번호 일괄 삽입</li>
+ * </ul>
+ *
+ * <h2>🚀 빠른 사용 예시 (Quick Start)</h2>
+ * <pre>{@code
+ * // [예제 1] Goono-ELN / 사이냅 대체용: 원격 표지 JSP/HTML URL + 본문 PDF 스트림 병합
+ * try (InputStream merged = S2PdfUtil.mergeHtmlUrlsAndPdfs(
+ *         List.of("https://example.com/eln/cover.jsp?noteId=123"),
+ *         List.of(notePdfStream1, notePdfStream2)
+ * )) {
+ *     // merged 스트림을 클라이언트에 다운로드 응답 (close 시 임시 파일 자동 정리)
+ *     IOUtils.copy(merged, response.getOutputStream());
+ * }
+ *
+ * // [예제 2] 이종(異種) 문서 소스 순서 보장 병합
+ * try (InputStream merged = S2PdfUtil.merge(
+ *         PdfSource.ofHtml("<h1>1. 보고서 표지</h1>"),
+ *         PdfSource.ofPdf(pdfFile),
+ *         PdfSource.ofImage(chartImageFile),
+ *         PdfSource.ofText("3. 첨부 텍스트 로그"),
+ *         PdfSource.ofUrl("https://api.example.com/chart.png")
+ * )) {
+ *     // 5가지 타입의 문서가 지정된 순서대로 정확하게 결합됨
+ * }
+ * }</pre>
+ *
+ * @author devers2
+ * @version 1.5
+ * @since 1.0
+ * @see S2ResourceInputStream
+ * @see PdfSource
+ */
+public class S2PdfUtil {
+
+    static {
+        // S2PdfUtil 관련 필수 의존성 유무를 체크
+        S2Util.checkDependency("S2PdfUtil", "org.jsoup.Jsoup", "org.jsoup:jsoup:1.23.2");
+        S2Util.checkDependency("S2PdfUtil", "com.openhtmltopdf.pdfboxout.PdfRendererBuilder", "io.github.openhtmltopdf:openhtmltopdf-pdfbox:1.1.85");
+    }
+
+    private static final S2Logger logger = S2LogManager.getLogger(S2PdfUtil.class);
+
+    private static final String DEFAULT_FONT_FAMILY = "ConvertPDF";
+    private static final String DEFAULT_FONT_SIZE = "10pt";
+    private static final String DEFAULT_MIME_TYPE = "image/png";
+
+    private static final String HTML_TEMPLATE = "<!DOCTYPE html>\n" +
+            "<html lang=\"ko\">\n" +
+            "    <head>\n" +
+            "        <style>%s\n" +
+            "            body {\n" +
+            "                font-family: " + DEFAULT_FONT_FAMILY + ";\n" +
+            "                font-size: " + DEFAULT_FONT_SIZE + ";\n" +
+            "            }\n" +
+            "        </style>\n" +
+            "    </head>\n" +
+            "    <body>%s</body>\n" +
+            "</html>";
+
+    /**
+     * HTML InputStream 을 Base64 인코딩된 PDF 문자열로 변환한다.
+     * <p>
+     * HTML 내의 이미지 경로(img src, background-image)를 Base64 인라인 데이터로 자동 치환하며,
+     * 외부 CSS 및 TTF/OTF 폰트를 적용하여 표준 A4 규격 PDF로 렌더링합니다.<br>
+     * 입력 스트림은 작업 완료 후 {@code finally} 블록에서 자동으로 닫힙니다.
+     * </p>
+     *
+     * @param htmlInputStream                          변환할 HTML 입력 스트림 (작업 완료 후 자동 close)
+     * @param staticResourceBasePath                   정적 자원 웹 기본 경로 (예: 이미지 경로가 {@code /static/images/a.png}인 경우 {@code "/static"})
+     * @param cssPath                                  적용할 CSS 클래스패스 파일 경로 (복수 개인 경우 쉼표(,)로 구분)
+     * @param fontPath                                 적용할 한글/영문 TTF/OTF 폰트 클래스패스 경로
+     * @param clazz                                    정적 자원(CSS, 폰트)을 클래스패스에서 로드하기 위한 기준 Class (보통 {@code getClass()})
+     * @param convertCssBackgroundImageTargetSelectors CSS {@code background-image}를 Base64로 치환할 특정 CSS 셀렉터 (생략 시 전체 대상)
+     * @return Base64 인코딩된 PDF 문자열 (웹 화면에서 {@code data:application/pdf;base64,...} 등으로 바로 사용 가능)
+     * @throws IOException 폰트 로드 실패 또는 변환 중 오류 발생 시
+     * @apiNote
+     * <pre>{@code
+     * String base64Pdf = S2PdfUtil.convertHtmlToPdf(
+     *         htmlInputStream,
+     *         "/static/public",
+     *         "/static/css/style.css",
+     *         "/static/font/NanumGothic.ttf",
+     *         getClass(),
+     *         ".cover-image-container"
+     * );
+     * }</pre>
+     */
+    public static <T> String convertHtmlToPdf(InputStream htmlInputStream, String staticResourceBasePath, String cssPath, String fontPath, Class<T> clazz, String... convertCssBackgroundImageTargetSelectors) throws IOException {
+        try {
+            var htmlContent = new String(IOUtils.toByteArray(htmlInputStream), StandardCharsets.UTF_8);
+            return convertHtmlToPdf(htmlContent, staticResourceBasePath, cssPath, fontPath, clazz, convertCssBackgroundImageTargetSelectors);
+        } finally {
+            if (htmlInputStream != null) {
+                try {
+                    htmlInputStream.close();
+                } catch (IOException e) {
+                    // 로그 처리
+                    logger.error("HTML InputStream 닫기 실패: ", e);
+                }
+            }
+        }
+    }
+
+    /**
+     * HTML 문자열을 Base64 인코딩된 PDF 문자열로 변환한다.
+     * <p>
+     * HTML 내의 이미지 경로(img src, background-image)를 Base64 인라인 데이터로 자동 치환하며,
+     * 외부 CSS 및 TTF/OTF 폰트를 적용하여 표준 A4 규격 PDF로 렌더링합니다.
+     * </p>
+     *
+     * @param htmlContent                              변환할 원본 HTML 문자열
+     * @param staticResourceBasePath                   정적 자원 웹 기본 경로 (예: 이미지 경로가 {@code /static/images/a.png}인 경우 {@code "/static"})
+     * @param cssPath                                  적용할 CSS 클래스패스 파일 경로 (복수 개인 경우 쉼표(,)로 구분)
+     * @param fontPath                                 적용할 한글/영문 TTF/OTF 폰트 클래스패스 경로
+     * @param clazz                                    정적 자원(CSS, 폰트)을 클래스패스에서 로드하기 위한 기준 Class (보통 {@code getClass()})
+     * @param convertCssBackgroundImageTargetSelectors CSS {@code background-image}를 Base64로 치환할 특정 CSS 셀렉터 (생략 시 전체 대상)
+     * @return Base64 인코딩된 PDF 문자열
+     * @throws IOException 폰트 로드 실패 또는 변환 중 오류 발생 시
+     * @apiNote
+     * <pre>{@code
+     * String base64Pdf = S2PdfUtil.convertHtmlToPdf(
+     *         "<h1>전자연구노트 보고서</h1><p>내용...</p>",
+     *         "/static/public",
+     *         "/static/css/style.css",
+     *         "/static/font/NanumGothic.ttf",
+     *         getClass(),
+     *         ".cover-image-container"
+     * );
+     * }</pre>
+     */
+    public static <T> String convertHtmlToPdf(String htmlContent, String staticResourceBasePath, String cssPath, String fontPath, Class<T> clazz, String... convertCssBackgroundImageTargetSelectors) throws IOException {
+        // 이미지 Base64 인코딩 및 HTML 포함
+        var htmlWithImages = embedImages(htmlContent, staticResourceBasePath, convertCssBackgroundImageTargetSelectors);
+
+        var cssContent = S2Util.isNotEmpty(cssPath) ? loadCssContent(clazz, cssPath, staticResourceBasePath, convertCssBackgroundImageTargetSelectors) : "";
+
+        var completeHtml = String.format(HTML_TEMPLATE, cssContent, htmlWithImages);
+
+        var xhtmlContent = convertToXhtml(completeHtml);
+        var pdfBytes = createPdf(xhtmlContent, clazz, fontPath);
+        return Base64.getEncoder().encodeToString(pdfBytes);
+    }
+
+    private static String embedImages(String htmlContent, String staticResourceBasePath, String... convertCssBackgroundImageTargetSelectors) {
+        try {
+            var doc = Jsoup.parse(htmlContent);
+
+            // 1. <img> 태그 처리
+            for (var img : doc.select("img")) {
+                var src = img.attr("src");
+                src = embedImage(src, staticResourceBasePath);
+                if (src != null) {
+                    img.attr("src", src);
+                }
+            }
+
+            // 2. style 태그 내의 background-image 처리
+            for (var style : doc.select("[style]")) {
+                var styleAttr = style.attr("style");
+                if (styleAttr.contains("background-image")) {
+                    styleAttr = processCssBackgroundImages(styleAttr, staticResourceBasePath, convertCssBackgroundImageTargetSelectors);
+                    style.attr("style", styleAttr);
+                }
+            }
+
+            // 3. <style> 태그 내의 background-image 처리
+            for (var styleTag : doc.select("style")) {
+                var cssContent = styleTag.html();
+                cssContent = processCssBackgroundImages(cssContent, staticResourceBasePath, convertCssBackgroundImageTargetSelectors);
+                styleTag.html(cssContent);
+            }
+
+            return doc.html();
+        } catch (Exception e) {
+            logger.error("HTML 파싱 오류: ", e);
+            return htmlContent;
+        }
+    }
+
+    private static String embedImage(String src, String staticResourceBasePath) { // 이미지 처리 공통 로직
+        if (src == null || src.startsWith("data:")) {
+            return src; // 이미 Base64 인코딩된 이미지 또는 src가 null
+        }
+
+        try {
+            byte[] imageBytes;
+            if (src.startsWith("http") || src.startsWith("https")) {
+                // URL 이미지 처리 (허용된 도메인만 처리하도록 제한하는 것이 좋음)
+                return null; // 일단 URL 이미지는 제외
+            } else {
+                // 상대 경로를 절대 경로로 변환
+                String absolutePath = src;
+                if (src.startsWith("../")) {
+                    absolutePath = src.replace("../", "/");
+                }
+                if (!absolutePath.startsWith("/")) {
+                    absolutePath = "/" + absolutePath;
+                }
+
+                // 로컬 이미지 처리 (클래스패스 기준)
+                try (InputStream imageStream = S2PdfUtil.class.getResourceAsStream(S2FileUtil.joinPaths(staticResourceBasePath, absolutePath))) {
+                    if (imageStream == null) {
+                        logger.error("이미지 파일을 찾을 수 없습니다: {}", absolutePath);
+                        return null;
+                    }
+                    imageBytes = IOUtils.toByteArray(imageStream);
+                }
+            }
+
+            var base64Image = Base64.getEncoder().encodeToString(imageBytes);
+            var mimeType = getMimeType(src.toLowerCase());
+            return "data:" + mimeType + ";base64," + base64Image;
+        } catch (IOException e) {
+            logger.error("이미지 처리 오류: {}", src, e);
+            return null;
+        }
+    }
+
+    /**
+     * css 파일의 배경 이미지를 처리한다.
+     *
+     * @param css CSS 파일
+     * @return 처리 문자열
+     */
+    private static String processCssBackgroundImages(String css, String staticResourceBasePath, String... convertCssBackgroundImageTargetSelectors) {
+        // 셀렉터가 없으면 전체 CSS에서 background 및 background-image 처리
+        if (convertCssBackgroundImageTargetSelectors == null || convertCssBackgroundImageTargetSelectors.length == 0) {
+            return processBackgroundImageUrls(css, staticResourceBasePath);
+        }
+
+        // 특정 셀렉터에 대해서만 처리
+        var result = new StringBuilder(css);
+
+        // 모든 대상 셀렉터에 대해 처리
+        for (var selector : convertCssBackgroundImageTargetSelectors) {
+            // CSS 블록을 찾는 정규식
+            var blockRegex = selector + "\\s*\\{[^}]*\\}";
+            var blockPattern = Pattern.compile(blockRegex);
+            var blockMatcher = blockPattern.matcher(result);
+
+            var tempResult = new StringBuilder();
+            while (blockMatcher.find()) {
+                var cssBlock = blockMatcher.group();
+                var processedBlock = processBackgroundImageUrls(cssBlock, staticResourceBasePath);
+                blockMatcher.appendReplacement(tempResult, S2StringUtil.replaceChars(processedBlock, "\\$", '$'));
+            }
+            blockMatcher.appendTail(tempResult);
+
+            // 처리된 결과로 업데이트
+            result = new StringBuilder(tempResult);
+        }
+
+        return result.toString();
+    }
+
+    /**
+     * CSS 문자열에서 background-image 또는 background URL 을 찾아 Base64로 변환한다.
+     *
+     * @param css                    CSS 문자열
+     * @param staticResourceBasePath 정적 자원 시작 경로 (이미지 경로가 /static/images 라면 "/static")
+     * @return 처리된 CSS 문자열
+     */
+    private static String processBackgroundImageUrls(String css, String staticResourceBasePath) {
+        // background-image와 background 속성을 모두 처리하는 정규식
+        var regex = "(background-image|background):\\s*([^;}]*)";
+        var pattern = Pattern.compile(regex);
+        var matcher = pattern.matcher(css);
+
+        var result = new StringBuilder();
+        while (matcher.find()) {
+            var property = matcher.group(1); // "background-image" 또는 "background"
+            var value = matcher.group(2).trim(); // 속성 값
+
+            if (property.equals("background-image")) {
+                // background-image 처리: 단일 URL만 포함 가능
+                var urlRegex = "url\\(['\"]?(.*?)['\"]?\\)";
+                var urlPattern = Pattern.compile(urlRegex);
+                var urlMatcher = urlPattern.matcher(value);
+                if (urlMatcher.find()) {
+                    var imagePath = urlMatcher.group(1);
+                    var embeddedImage = embedImage(imagePath, staticResourceBasePath);
+                    if (embeddedImage != null) {
+                        matcher.appendReplacement(result, "background-image: url('" + S2StringUtil.replaceChars(embeddedImage, "\\$", '$') + "')");
+                    }
+                }
+            } else if (property.equals("background")) {
+                // background 처리: gradient와 여러 URL 포함 가능
+                var processedValue = processGradientUrls(value, staticResourceBasePath);
+                matcher.appendReplacement(result, "background: " + processedValue);
+            }
+        }
+        matcher.appendTail(result);
+        return result.toString();
+    }
+
+    /**
+     * gradient 함수 내의 url()을 처리하여 Base64로 변환한다.
+     *
+     * @param value                  CSS 속성 값 (background 값)
+     * @param staticResourceBasePath 정적 자원 시작 경로
+     * @return 처리된 값
+     */
+    private static String processGradientUrls(String value, String staticResourceBasePath) {
+        // gradient 패턴: linear-gradient(...) 등
+        var gradientRegex = "(linear-gradient\\([^)]*\\))";
+        var gradientPattern = Pattern.compile(gradientRegex);
+        var gradientMatcher = gradientPattern.matcher(value);
+
+        var tempValue = new StringBuilder();
+        var lastEnd = 0;
+
+        while (gradientMatcher.find()) {
+            var gradient = gradientMatcher.group(1); // linear-gradient(...)
+            tempValue.append(value.substring(lastEnd, gradientMatcher.start())); // gradient 전 부분 추가
+
+            // gradient 내부의 url() 처리
+            var urlRegex = "url\\(['\"]?(.*?)['\"]?\\)";
+            var urlPattern = Pattern.compile(urlRegex);
+            var urlMatcher = urlPattern.matcher(gradient);
+
+            var gradientBuffer = new StringBuilder();
+            var gradientLastEnd = 0;
+            while (urlMatcher.find()) {
+                gradientBuffer.append(gradient.substring(gradientLastEnd, urlMatcher.start()));
+                var imagePath = urlMatcher.group(1);
+                var embeddedImage = embedImage(imagePath, staticResourceBasePath);
+                if (embeddedImage != null) {
+                    gradientBuffer.append("url('").append(S2StringUtil.replaceChars(embeddedImage, "\\$", '$')).append("')");
+                } else {
+                    gradientBuffer.append(urlMatcher.group(0)); // 변환 실패 시 원래 값 유지
+                }
+                gradientLastEnd = urlMatcher.end();
+            }
+            gradientBuffer.append(gradient.substring(gradientLastEnd));
+            tempValue.append(gradientBuffer.toString());
+
+            lastEnd = gradientMatcher.end();
+        }
+        tempValue.append(value.substring(lastEnd));
+
+        // gradient 외부의 url() 처리
+        var urlRegex = "url\\(['\"]?(.*?)['\"]?\\)";
+        var urlPattern = Pattern.compile(urlRegex);
+        var urlMatcher = urlPattern.matcher(tempValue.toString());
+
+        var finalValue = new StringBuilder();
+        lastEnd = 0;
+        while (urlMatcher.find()) {
+            finalValue.append(tempValue.substring(lastEnd, urlMatcher.start()));
+            var imagePath = urlMatcher.group(1);
+            var embeddedImage = embedImage(imagePath, staticResourceBasePath);
+            if (embeddedImage != null) {
+                finalValue.append("url('").append(S2StringUtil.replaceChars(embeddedImage, "\\$", '$')).append("')");
+            } else {
+                finalValue.append(urlMatcher.group(0)); // 변환 실패 시 원래 값 유지
+            }
+            lastEnd = urlMatcher.end();
+        }
+        finalValue.append(tempValue.substring(lastEnd));
+
+        return finalValue.toString();
+    }
+
+    private static <T> String loadCssContent(Class<T> clazz, String cssPath, String staticResourceBasePath, String... convertCssBackgroundImageTargetSelectors)
+            throws IOException {
+        var combinedCssContent = new StringBuilder();
+
+        if (cssPath != null) {
+            String[] cssPaths = cssPath.split(",");
+            for (var path : cssPaths) {
+                if (S2Util.isNotEmpty(path)) {
+                    path = path.trim();
+                    try (var inputStream = clazz.getResourceAsStream(path)) {
+                        if (inputStream == null) {
+                            throw new IOException("CSS 파일을 찾을 수 없습니다: " + path);
+                        }
+                        var cssContent = new String(IOUtils.toByteArray(inputStream), StandardCharsets.UTF_8);
+                        // !!s2!! clear: both; 속성 제거 (해당 속성이 있는 경우 PDF 변환 오류 발생)
+                        cssContent = S2StringUtil.replaceAll(cssContent, "clear\\s*:\\s*both\\s*;", "");
+                        combinedCssContent.append(processCssBackgroundImages(cssContent, staticResourceBasePath, convertCssBackgroundImageTargetSelectors));
+                    }
+                }
+            }
+        }
+
+        return combinedCssContent.toString();
+    }
+
+    private static String convertToXhtml(String html) {
+        var document = Jsoup.parse(html, "", Parser.xmlParser());
+        document.outputSettings().syntax(Document.OutputSettings.Syntax.xml).escapeMode(Entities.EscapeMode.xhtml);
+        return document.html();
+    }
+
+    private static <T> byte[] createPdf(String htmlContent, Class<T> clazz, String fontPath)
+            throws IOException {
+        try (var outputStream = new ByteArrayOutputStream()) {
+            var builder = new PdfRendererBuilder();
+            builder.withHtmlContent(htmlContent, null);
+
+            if (S2Util.isNotEmpty(fontPath) && clazz != null) {
+                try (var fontStream = clazz.getResourceAsStream(fontPath)) {
+                    if (fontStream != null) {
+                        byte[] fontBytes = IOUtils.toByteArray(fontStream);
+                        builder.useFont(() -> new ByteArrayInputStream(fontBytes), DEFAULT_FONT_FAMILY);
+                    }
+                }
+            }
+
+            builder.toStream(outputStream);
+            builder.run();
+            return outputStream.toByteArray();
+        }
+    }
+
+    private static String getMimeType(String fileName) {
+        if (fileName.endsWith(".png"))
+            return "image/png";
+        if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg"))
+            return "image/jpeg";
+        if (fileName.endsWith(".gif"))
+            return "image/gif";
+        if (fileName.endsWith(".svg"))
+            return "image/svg+xml";
+        return DEFAULT_MIME_TYPE;
+    }
+
+    /**
+     * PDF 를 이미지로 변환한다.
+     *
+     * @param pdfFile     PDF 파일
+     * @param pageNo      변환할 페이지 번호
+     * @param imagePath   변환 결과 이미지 경로
+     * @param dpi         변환 이미지 해상도
+     * @param imageFormat 변환 이미지 포멧(확장자)
+     * @return 변환한 페이지의 다음 페이지가 존재하는지 여부
+     */
+    public static boolean pdfToImage(Path pdfFile, int pageNo, Path imagePath, Integer dpi, String imageFormat) {
+        var hasNextPage = false;
+        try (var document = Loader.loadPDF(pdfFile.toFile())) {
+            hasNextPage = pdfToImage(document, pageNo, imagePath, dpi, imageFormat);
+        } catch (IOException e) {
+            logger.error("PDF to Image 변환 오류[Path]: ", e);
+        }
+        return hasNextPage;
+    }
+
+    /**
+     * PDF 를 이미지로 변환한다.
+     *
+     * @param pdfData           PDF InputStream
+     * @param pageNo            변환할 페이지 번호
+     * @param imagePath         변환 결과 이미지 경로
+     * @param dpi               변환 이미지 해상도
+     * @param imageFormat       변환 이미지 포멧(확장자)
+     * @param shouldCloseStream inputStream 을 닫을지 여부
+     * @return 변환한 페이지의 다음 페이지가 존재하는지 여부
+     */
+    public static boolean pdfToImage(InputStream pdfData, int pageNo, Path imagePath, Integer dpi, String imageFormat, boolean shouldCloseStream) {
+        var hasNextPage = new AtomicBoolean(false);
+        try {
+            S2FileUtil.processStreamWithTempFile(pdfData, null, tempFile -> {
+                try (var document = Loader.loadPDF(tempFile.toFile())) {
+                    hasNextPage.set(pdfToImage(document, pageNo, imagePath, dpi, imageFormat));
+                } catch (IOException e) {
+                    logger.error("PDF to Image 변환 오류[InputStream1]: ", e);
+                }
+
+                return null;
+            }, shouldCloseStream);
+        } catch (IOException e) {
+            logger.error("PDF to Image 변환 오류[InputStream2]: ", e);
+        }
+        return hasNextPage.get();
+    }
+
+    /**
+     * PDF 를 이미지로 변환한다.
+     *
+     * @param pdfData     PDF byte[]
+     * @param pageNo      변환할 페이지 번호
+     * @param imagePath   변환 결과 이미지 경로
+     * @param dpi         변환 이미지 해상도
+     * @param imageFormat 변환 이미지 포멧(확장자)
+     * @return 변환한 페이지의 다음 페이지가 존재하는지 여부
+     */
+    public static boolean pdfToImage(byte[] pdfData, int pageNo, Path imagePath, Integer dpi, String imageFormat) {
+        var hasNextPage = false;
+        try (var document = Loader.loadPDF(pdfData)) {
+            hasNextPage = pdfToImage(document, pageNo, imagePath, dpi, imageFormat);
+        } catch (IOException e) {
+            logger.error("PDF to Image 변환 오류[byteArray]: ", e);
+        }
+        return hasNextPage;
+    }
+
+    /**
+     * PDF 를 이미지로 변환한다.
+     *
+     * @param document    PDF 문서
+     * @param pageNo      변환할 페이지 번호
+     * @param imagePath   변환 결과 이미지 경로
+     * @param dpi         변환 이미지 해상도
+     * @param imageFormat 변환 이미지 포멧(확장자)
+     * @return 변환한 페이지의 다음 페이지가 존재하는지 여부
+     * @throws IOException IOException
+     */
+    private static boolean pdfToImage(PDDocument document, int pageNo, Path imagePath, Integer dpi, String imageFormat) throws IOException {
+        var hasNextPage = false;
+        if (document == null) {
+            throw new S2RuntimeException("[pdfToImage] PDF Document is null.");
+        }
+
+        var totalPages = document.getNumberOfPages();
+
+        if (pageNo < 1) {
+            pageNo = 1;
+        } else if (pageNo > totalPages) {
+            pageNo = totalPages;
+        }
+
+        if (pageNo < totalPages) {
+            hasNextPage = true;
+        }
+
+        var pdfRenderer = new PDFRenderer(document);
+        var image = pdfRenderer.renderImageWithDPI(pageNo - 1, dpi == null ? 300 : dpi, ImageType.RGB);
+        ImageIO.write(
+                image, !"jpeg".equalsIgnoreCase(imageFormat) && !"jpg".equalsIgnoreCase(imageFormat)
+                        ? "png"
+                        : imageFormat, imagePath.toFile()
+        );
+        return hasNextPage;
+    }
+
+    /**
+     * PDF 를 이미지로 변환한다.
+     *
+     * @param pdfFile             PDF 파일
+     * @param pageNo              변환할 페이지 번호
+     * @param dpi                 변환 이미지 해상도
+     * @param imageFormat         변환 이미지 포멧(확장자)
+     * @param hasNextPageConsumer 함수형 인터페이스(변환한 페이지의 다음 페이지가 존재하는지 여부)
+     * @return 변환한 이미지 InputStream
+     */
+    public static InputStream pdfToImage(Path pdfFile, int pageNo, Integer dpi, String imageFormat, BiConsumer<Boolean, Integer> hasNextPageConsumer) {
+        InputStream result = null;
+        try (var document = Loader.loadPDF(pdfFile.toFile())) {
+            result = pdfToImage(document, pageNo, dpi, imageFormat, hasNextPageConsumer);
+        } catch (IOException e) {
+            logger.error("PDF to Image InputStream 변환 오류[Path]: ", e);
+        }
+        return result;
+    }
+
+    /**
+     * PDF 를 이미지로 변환한다.
+     *
+     * @param pdfData             PDF InputStream
+     * @param pageNo              변환할 페이지 번호
+     * @param dpi                 변환 이미지 해상도
+     * @param imageFormat         변환 이미지 포멧(확장자)
+     * @param hasNextPageConsumer 함수형 인터페이스(변환한 페이지의 다음 페이지가 존재하는지 여부)
+     * @param shouldCloseStream   inputStream 을 닫을지 여부
+     * @return 변환한 이미지 InputStream
+     */
+    public static InputStream pdfToImage(InputStream pdfData, int pageNo, Integer dpi, String imageFormat, BiConsumer<Boolean, Integer> hasNextPageConsumer, boolean shouldCloseStream) {
+        var result = new AtomicReference<InputStream>();
+        try {
+            S2FileUtil.processStreamWithTempFile(pdfData, null, tempFile -> {
+                try (var document = Loader.loadPDF(tempFile.toFile())) {
+                    result.set(pdfToImage(document, pageNo, dpi, imageFormat, hasNextPageConsumer));
+                } catch (IOException e) {
+                    logger.error("PDF to Image InputStream 변환 오류[InputStream1]: ", e);
+                }
+
+                return null;
+            }, shouldCloseStream);
+        } catch (IOException e) {
+            logger.error("PDF to Image InputStream 변환 오류[InputStream2]: ", e);
+        }
+        return result.get();
+    }
+
+    /**
+     * PDF 를 이미지로 변환한다.
+     *
+     * @param pdfData             PDF byte[]
+     * @param pageNo              변환할 페이지 번호
+     * @param dpi                 변환 이미지 해상도
+     * @param imageFormat         변환 이미지 포멧(확장자)
+     * @param hasNextPageConsumer 함수형 인터페이스(변환한 페이지의 다음 페이지가 존재하는지 여부)
+     * @return 변환한 이미지 InputStream
+     */
+    public static InputStream pdfToImage(byte[] pdfData, int pageNo, Integer dpi, String imageFormat, BiConsumer<Boolean, Integer> hasNextPageConsumer) {
+        InputStream result = null;
+        try (var document = Loader.loadPDF(pdfData)) {
+            result = pdfToImage(document, pageNo, dpi, imageFormat, hasNextPageConsumer);
+        } catch (IOException e) {
+            logger.error("PDF to Image InputStream 변환 오류[byteArray]: ", e);
+        }
+        return result;
+    }
+
+    /**
+     * PDF 를 이미지로 변환한다.
+     *
+     * @param document            PDF 문서
+     * @param pageNo              변환할 페이지 번호
+     * @param dpi                 변환 이미지 해상도
+     * @param imageFormat         변환 이미지 포멧(확장자)
+     * @param hasNextPageConsumer 함수형 인터페이스(변환한 페이지의 다음 페이지가 존재하는지 여부)
+     * @return 변환한 이미지 InputStream
+     * @throws IOException IOException
+     */
+    private static InputStream pdfToImage(PDDocument document, int pageNo, Integer dpi, String imageFormat, BiConsumer<Boolean, Integer> hasNextPageConsumer) throws IOException {
+        InputStream result = null;
+        var hasNextPage = false;
+        if (document == null) {
+            throw new S2RuntimeException("[pdfToImage InputStream] PDF Document is null.");
+        }
+
+        var totalPages = document.getNumberOfPages();
+
+        if (pageNo < 1) {
+            pageNo = 1;
+        } else if (pageNo > totalPages) {
+            pageNo = totalPages;
+        }
+
+        if (pageNo < totalPages) {
+            hasNextPage = true;
+        }
+
+        var pdfRenderer = new PDFRenderer(document);
+        var image = pdfRenderer.renderImageWithDPI(pageNo - 1, dpi == null ? 300 : dpi, ImageType.RGB);
+
+        try (var outputStream = new ByteArrayOutputStream()) {
+            ImageIO.write(
+                    image, !"jpeg".equalsIgnoreCase(imageFormat) && !"jpg".equalsIgnoreCase(imageFormat)
+                            ? "png"
+                            : imageFormat, outputStream
+            );
+            result = new ByteArrayInputStream(outputStream.toByteArray());
+        }
+
+        if (hasNextPageConsumer != null) {
+            // BiConsumer 호출
+            hasNextPageConsumer.accept(hasNextPage, totalPages);
+        }
+
+        return result;
+    }
+
+    /**
+     * PDF 에 페이지 번호를 추가한다.
+     *
+     * @param pdfFile               PDF 파일
+     * @param numberOfPagesToInsert 추가할 페이지 수 (PDF 전체 페이지 수보다 작은 경우 적은 페이지 만큼 비우고 페이지 번호를 추가한다.)
+     * @param fontSize              페이지 폰트 사이즈
+     * @param fontFile              페이지 폰프 파일
+     * @return 페이지 번호를 추가한 InputStream
+     * @throws IOException IOException
+     */
+    public static InputStream addPageNumbers(Path pdfFile, int numberOfPagesToInsert, Integer fontSize, File fontFile) throws IOException {
+        InputStream result = null;
+        try (var document = Loader.loadPDF(pdfFile.toFile())) {
+            result = addPageNumbers(document, numberOfPagesToInsert, fontSize, fontFile);
+        } catch (IOException e) {
+            logger.error("PDF 페이지 번호 추가 오류[Path]: ", e);
+        }
+        return result;
+    }
+
+    /**
+     * PDF 에 페이지 번호를 추가한다.
+     *
+     * @param pdfData               PDF InputStream
+     * @param numberOfPagesToInsert 추가할 페이지 수 (PDF 전체 페이지 수보다 작은 경우 적은 페이지 만큼 비우고 페이지 번호를 추가한다.)
+     * @param fontSize              페이지 폰트 사이즈
+     * @param fontFile              페이지 폰프 파일
+     * @param shouldCloseStream     inputStream 을 닫을지 여부
+     * @return 페이지 번호를 추가한 InputStream
+     * @throws IOException IOException
+     */
+    public static InputStream addPageNumbers(InputStream pdfData, int numberOfPagesToInsert, Integer fontSize, File fontFile, boolean shouldCloseStream) throws IOException {
+        var result = new AtomicReference<InputStream>();
+        try {
+            S2FileUtil.processStreamWithTempFile(pdfData, null, tempFile -> {
+                try (var document = Loader.loadPDF(tempFile.toFile())) {
+                    result.set(addPageNumbers(document, numberOfPagesToInsert, fontSize, fontFile));
+                } catch (IOException e) {
+                    logger.error("PDF 페이지 번호 추가 오류[InputStream1]: ", e);
+                }
+
+                return null;
+            }, shouldCloseStream);
+        } catch (IOException e) {
+            logger.error("PDF 페이지 번호 추가 오류[InputStream2]: ", e);
+        }
+        return result.get();
+    }
+
+    /**
+     * PDF 에 페이지 번호를 추가한다. (JAR/WAR 배포 환경에서 ClassPathResource.getInputStream() 사용 가능)
+     *
+     * @param pdfData               PDF InputStream
+     * @param numberOfPagesToInsert 추가할 페이지 수 (PDF 전체 페이지 수보다 작은 경우 적은 페이지 만큼 비우고 페이지 번호를 추가한다.)
+     * @param fontSize              페이지 폰트 사이즈
+     * @param fontStream            페이지 폰트 InputStream (null 이면 기본 폰트 사용, 작업 완료 후 자동 close)
+     * @param shouldCloseStream     inputStream 을 닫을지 여부
+     * @return 페이지 번호를 추가한 InputStream
+     * @throws IOException IOException
+     */
+    public static InputStream addPageNumbers(InputStream pdfData, int numberOfPagesToInsert, Integer fontSize, InputStream fontStream, boolean shouldCloseStream) throws IOException {
+        var result = new AtomicReference<InputStream>();
+        try {
+            S2FileUtil.processStreamWithTempFile(pdfData, null, tempFile -> {
+                try (var document = Loader.loadPDF(tempFile.toFile())) {
+                    result.set(addPageNumbers(document, numberOfPagesToInsert, fontSize, fontStream));
+                } catch (IOException e) {
+                    logger.error("PDF 페이지 번호 추가 오류[InputStream-fontStream1]: ", e);
+                }
+
+                return null;
+            }, shouldCloseStream);
+        } catch (IOException e) {
+            logger.error("PDF 페이지 번호 추가 오류[InputStream-fontStream2]: ", e);
+        }
+        return result.get();
+    }
+
+    /**
+     * PDF 에 페이지 번호를 추가한다.
+     *
+     * @param pdfData               PDF byte[]
+     * @param numberOfPagesToInsert 추가할 페이지 수 (PDF 전체 페이지 수보다 작은 경우 적은 페이지 만큼 비우고 페이지 번호를 추가한다.)
+     * @param fontSize              페이지 폰트 사이즈
+     * @param fontFile              페이지 폰프 파일
+     * @return 페이지 번호를 추가한 InputStream
+     * @throws IOException IOException
+     */
+    public static InputStream addPageNumbers(byte[] pdfData, int numberOfPagesToInsert, Integer fontSize, File fontFile) throws IOException {
+        InputStream result = null;
+        try (var document = Loader.loadPDF(pdfData)) {
+            result = addPageNumbers(document, numberOfPagesToInsert, fontSize, fontFile);
+        } catch (IOException e) {
+            logger.error("PDF 페이지 번호 추가 오류[byteArray]: ", e);
+        }
+        return result;
+    }
+
+    /**
+     * PDF 에 페이지 번호를 추가한다.
+     *
+     * @param document              PDF 문서
+     * @param numberOfPagesToInsert 추가할 페이지 수 (PDF 전체 페이지 수보다 작은 경우 적은 페이지 만큼 비우고 페이지 번호를 추가한다.)
+     * @param fontSize              페이지 폰트 사이즈
+     * @param fontFile              페이지 폰프 파일
+     * @return 페이지 번호를 추가한 InputStream
+     * @throws IOException IOException
+     */
+    private static InputStream addPageNumbers(PDDocument document, int numberOfPagesToInsert, Integer fontSize, File fontFile) throws IOException {
+        InputStream result = null;
+
+        if (document == null) {
+            throw new S2RuntimeException("[addPageNumbers] PDF Document is null.");
+        }
+
+        var totalPages = document.getNumberOfPages();
+        if (totalPages >= numberOfPagesToInsert) {
+            var startIdx = totalPages - numberOfPagesToInsert;
+            var pageCnt = 0;
+
+            PDFont font;
+            try {
+                font = fontFile != null ? PDType0Font.load(document, fontFile)
+                        : new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+            } catch (Exception e) {
+                font = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+            }
+
+            for (int i = 0; i < totalPages; i++) {
+                if (i >= startIdx) {
+                    var page = document.getPage(i);
+                    try (var contentStream = new PDPageContentStream(
+                            document, page,
+                            PDPageContentStream.AppendMode.APPEND, true, true
+                    )) {
+                        var xPosition = page.getMediaBox().getWidth() / 2 - 20; // 중앙 정렬
+                        var yPosition = 20F; // 하단에서 20pt 위
+
+                        contentStream.beginText();
+                        contentStream.setFont(font, fontSize != null ? fontSize : 10);
+                        contentStream.newLineAtOffset(xPosition, yPosition);
+                        contentStream.showText(String.format("%d / %d", ++pageCnt, numberOfPagesToInsert));
+                        contentStream.endText();
+                    }
+                }
+            }
+
+            // 임시 출력 파일에 저장
+            var tempFile = Files.createTempFile(S2Uuid.generateUuidV7() + "_", ".pdf");
+            S2FileUtil.makeDirectory(tempFile.getParent());
+
+            var tempOutputFile = tempFile.toFile();
+            document.save(tempOutputFile);
+
+            result = new S2ResourceInputStream(new BufferedInputStream(Files.newInputStream(tempOutputFile.toPath())), tempFile);
+        }
+
+        return result;
+    }
+
+    /**
+     * PDF 에 페이지 번호를 추가한다.
+     *
+     * @param document              PDF 문서
+     * @param numberOfPagesToInsert 추가할 페이지 수 (PDF 전체 페이지 수보다 작은 경우 적은 페이지 만큼 비우고 페이지 번호를 추가한다.)
+     * @param fontSize              페이지 폰트 사이즈
+     * @param fontStream            페이지 폰트 InputStream (null 이면 기본 폰트 사용)
+     * @return 페이지 번호를 추가한 InputStream
+     * @throws IOException IOException
+     */
+    private static InputStream addPageNumbers(PDDocument document, int numberOfPagesToInsert, Integer fontSize, InputStream fontStream) throws IOException {
+        InputStream result = null;
+
+        try {
+            if (document == null) {
+                throw new S2RuntimeException("[addPageNumbers] PDF Document is null.");
+            }
+
+            var totalPages = document.getNumberOfPages();
+            if (totalPages >= numberOfPagesToInsert) {
+                var startIdx = totalPages - numberOfPagesToInsert;
+                var pageCnt = 0;
+
+                PDFont font;
+                try {
+                    font = fontStream != null ? PDType0Font.load(document, fontStream)
+                            : new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+                } catch (Exception e) {
+                    font = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+                }
+
+                for (int i = 0; i < totalPages; i++) {
+                    if (i >= startIdx) {
+                        var page = document.getPage(i);
+                        try (var contentStream = new PDPageContentStream(
+                                document, page,
+                                PDPageContentStream.AppendMode.APPEND, true, true
+                        )) {
+                            var xPosition = page.getMediaBox().getWidth() / 2 - 20; // 중앙 정렬
+                            var yPosition = 20F; // 하단에서 20pt 위
+
+                            contentStream.beginText();
+                            contentStream.setFont(font, fontSize != null ? fontSize : 10);
+                            contentStream.newLineAtOffset(xPosition, yPosition);
+                            contentStream.showText(String.format("%d / %d", ++pageCnt, numberOfPagesToInsert));
+                            contentStream.endText();
+                        }
+                    }
+                }
+
+                // 임시 출력 파일에 저장
+                var tempFile = Files.createTempFile(S2Uuid.generateUuidV7() + "_", ".pdf");
+                S2FileUtil.makeDirectory(tempFile.getParent());
+
+                var tempOutputFile = tempFile.toFile();
+                document.save(tempOutputFile);
+
+                result = new S2ResourceInputStream(new BufferedInputStream(Files.newInputStream(tempOutputFile.toPath())), tempFile);
+            }
+
+            return result;
+        } finally {
+            S2StreamUtil.closeStream(fontStream);
+        }
+    }
+
+    // ========================================================================
+    // 📑 PDF / HTML / Image / Text / SVG 통합 병합 (Merge) API
+    // ========================================================================
+
+    /**
+     * PDF 병합에 사용할 문서 소스 정의 클래스.
+     * <p>PDF, HTML, 이미지(PNG/JPG/GIF/WebP 등), 일반 텍스트, SVG 문서를 통합 관리합니다.</p>
+     */
+    public static class PdfSource implements AutoCloseable {
+        public enum SourceType { PDF, HTML, IMAGE, TEXT, SVG, URL }
+
+        private final SourceType type;
+        private InputStream inputStream;
+        private byte[] byteData;
+        private File fileData;
+        private Path pathData;
+        private BufferedImage imageObj;
+        private String textOrHtmlContent;
+
+        // URL 소스 옵션
+        private String urlString;
+        private SourceType urlExpectedType;
+        private Map<String, String> httpHeaders;
+        private Duration timeout = Duration.ofSeconds(30);
+
+        // HTML / SVG 렌더링 옵션
+        private String staticResourceBasePath;
+        private String cssPath;
+        private String fontPath;
+        private Class<?> resourceClass;
+        private String[] cssSelectors;
+
+        private boolean autoCloseStream = true;
+
+        private PdfSource(SourceType type) {
+            this.type = type;
+        }
+
+        /** PDF InputStream 소스 생성 */
+        public static PdfSource ofPdf(InputStream pdfStream) {
+            var src = new PdfSource(SourceType.PDF);
+            src.inputStream = Objects.requireNonNull(pdfStream, "[PdfSource] pdfStream must not be null");
+            return src;
+        }
+
+        /** PDF File 소스 생성 */
+        public static PdfSource ofPdf(File pdfFile) {
+            var src = new PdfSource(SourceType.PDF);
+            src.fileData = Objects.requireNonNull(pdfFile, "[PdfSource] pdfFile must not be null");
+            return src;
+        }
+
+        /** PDF Path 소스 생성 */
+        public static PdfSource ofPdf(Path pdfPath) {
+            var src = new PdfSource(SourceType.PDF);
+            src.pathData = Objects.requireNonNull(pdfPath, "[PdfSource] pdfPath must not be null");
+            return src;
+        }
+
+        /** PDF byte[] 소스 생성 */
+        public static PdfSource ofPdf(byte[] pdfBytes) {
+            var src = new PdfSource(SourceType.PDF);
+            src.byteData = Objects.requireNonNull(pdfBytes, "[PdfSource] pdfBytes must not be null");
+            return src;
+        }
+
+        /** 단순 HTML 소스 생성 */
+        public static PdfSource ofHtml(String htmlContent) {
+            var src = new PdfSource(SourceType.HTML);
+            src.textOrHtmlContent = Objects.requireNonNull(htmlContent, "[PdfSource] htmlContent must not be null");
+            return src;
+        }
+
+        /** 정적 리소스(CSS, Font, 이미지 등)를 포함하는 HTML 소스 생성 */
+        public static PdfSource ofHtml(String htmlContent, String staticResourceBasePath, String cssPath, String fontPath, Class<?> resourceClass, String... cssSelectors) {
+            var src = new PdfSource(SourceType.HTML);
+            src.textOrHtmlContent = Objects.requireNonNull(htmlContent, "[PdfSource] htmlContent must not be null");
+            src.staticResourceBasePath = staticResourceBasePath;
+            src.cssPath = cssPath;
+            src.fontPath = fontPath;
+            src.resourceClass = resourceClass;
+            src.cssSelectors = cssSelectors;
+            return src;
+        }
+
+        /** HTML InputStream 소스 생성 */
+        public static PdfSource ofHtml(InputStream htmlStream, String staticResourceBasePath, String cssPath, String fontPath, Class<?> resourceClass, String... cssSelectors) throws IOException {
+            try {
+                var html = new String(IOUtils.toByteArray(htmlStream), StandardCharsets.UTF_8);
+                return ofHtml(html, staticResourceBasePath, cssPath, fontPath, resourceClass, cssSelectors);
+            } finally {
+                S2StreamUtil.closeStream(htmlStream);
+            }
+        }
+
+        /** HTML File 소스 생성 */
+        public static PdfSource ofHtml(File htmlFile) throws IOException {
+            return ofHtml(Files.readString(Objects.requireNonNull(htmlFile, "[PdfSource] htmlFile must not be null").toPath(), StandardCharsets.UTF_8));
+        }
+
+        /** HTML Path 소스 생성 */
+        public static PdfSource ofHtml(Path htmlPath) throws IOException {
+            return ofHtml(Files.readString(Objects.requireNonNull(htmlPath, "[PdfSource] htmlPath must not be null"), StandardCharsets.UTF_8));
+        }
+
+        /** 이미지 InputStream 소스 생성 (PNG, JPG, JPEG, GIF, BMP, WebP 지원) */
+        public static PdfSource ofImage(InputStream imageStream) {
+            var src = new PdfSource(SourceType.IMAGE);
+            src.inputStream = Objects.requireNonNull(imageStream, "[PdfSource] imageStream must not be null");
+            return src;
+        }
+
+        /** 이미지 File 소스 생성 */
+        public static PdfSource ofImage(File imageFile) {
+            var src = new PdfSource(SourceType.IMAGE);
+            src.fileData = Objects.requireNonNull(imageFile, "[PdfSource] imageFile must not be null");
+            return src;
+        }
+
+        /** 이미지 Path 소스 생성 */
+        public static PdfSource ofImage(Path imagePath) {
+            var src = new PdfSource(SourceType.IMAGE);
+            src.pathData = Objects.requireNonNull(imagePath, "[PdfSource] imagePath must not be null");
+            return src;
+        }
+
+        /** 이미지 byte[] 소스 생성 */
+        public static PdfSource ofImage(byte[] imageBytes) {
+            var src = new PdfSource(SourceType.IMAGE);
+            src.byteData = Objects.requireNonNull(imageBytes, "[PdfSource] imageBytes must not be null");
+            return src;
+        }
+
+        /** 이미지 BufferedImage 소스 생성 */
+        public static PdfSource ofImage(BufferedImage image) {
+            var src = new PdfSource(SourceType.IMAGE);
+            src.imageObj = Objects.requireNonNull(image, "[PdfSource] image must not be null");
+            return src;
+        }
+
+        /** 일반 텍스트 소스 생성 (A4 코드/텍스트 뷰어로 자동 서식화) */
+        public static PdfSource ofText(String plainText) {
+            var src = new PdfSource(SourceType.TEXT);
+            src.textOrHtmlContent = Objects.requireNonNull(plainText, "[PdfSource] plainText must not be null");
+            return src;
+        }
+
+        /** 일반 텍스트 InputStream 소스 생성 */
+        public static PdfSource ofText(InputStream textStream) throws IOException {
+            try {
+                var text = new String(IOUtils.toByteArray(textStream), StandardCharsets.UTF_8);
+                return ofText(text);
+            } finally {
+                S2StreamUtil.closeStream(textStream);
+            }
+        }
+
+        /** 일반 텍스트 File 소스 생성 */
+        public static PdfSource ofText(File textFile) throws IOException {
+            return ofText(Files.readString(Objects.requireNonNull(textFile, "[PdfSource] textFile must not be null").toPath(), StandardCharsets.UTF_8));
+        }
+
+        /** 일반 텍스트 Path 소스 생성 */
+        public static PdfSource ofText(Path textPath) throws IOException {
+            return ofText(Files.readString(Objects.requireNonNull(textPath, "[PdfSource] textPath must not be null"), StandardCharsets.UTF_8));
+        }
+
+        /** SVG 벡터 그래픽 소스 생성 (단일 페이지 벡터 PDF로 자동 변환) */
+        public static PdfSource ofSvg(String svgContent) {
+            var src = new PdfSource(SourceType.SVG);
+            src.textOrHtmlContent = Objects.requireNonNull(svgContent, "[PdfSource] svgContent must not be null");
+            return src;
+        }
+
+        /** SVG 벡터 그래픽 InputStream 소스 생성 */
+        public static PdfSource ofSvg(InputStream svgStream) throws IOException {
+            try {
+                var svg = new String(IOUtils.toByteArray(svgStream), StandardCharsets.UTF_8);
+                return ofSvg(svg);
+            } finally {
+                S2StreamUtil.closeStream(svgStream);
+            }
+        }
+
+        /** SVG File 소스 생성 */
+        public static PdfSource ofSvg(File svgFile) throws IOException {
+            return ofSvg(Files.readString(Objects.requireNonNull(svgFile, "[PdfSource] svgFile must not be null").toPath(), StandardCharsets.UTF_8));
+        }
+
+        /** SVG Path 소스 생성 */
+        public static PdfSource ofSvg(Path svgPath) throws IOException {
+            return ofSvg(Files.readString(Objects.requireNonNull(svgPath, "[PdfSource] svgPath must not be null"), StandardCharsets.UTF_8));
+        }
+
+        /** URL 소스 생성 (원격 리소스 다운로드 및 Content-Type/Magic-Byte 기반 자동 감지) */
+        public static PdfSource ofUrl(String url) {
+            var src = new PdfSource(SourceType.URL);
+            src.urlString = Objects.requireNonNull(url, "[PdfSource] url must not be null");
+            return src;
+        }
+
+        /** URI 기반 소스 생성 (자동 감지) */
+        public static PdfSource ofUrl(URI uri) {
+            return ofUrl(Objects.requireNonNull(uri, "[PdfSource] uri must not be null").toString());
+        }
+
+        /** URL 소스 생성 (헤더 및 타임아웃 지정) */
+        public static PdfSource ofUrl(String url, Map<String, String> httpHeaders, Duration timeout) {
+            var src = ofUrl(url);
+            src.httpHeaders = httpHeaders;
+            if (timeout != null) {
+                src.timeout = timeout;
+            }
+            return src;
+        }
+
+        /** HTML URL 소스 생성 (Goono-ELN 표지 JSP/HTML 등 원격 렌더링용) */
+        public static PdfSource ofHtmlUrl(String url) {
+            var src = ofUrl(url);
+            src.urlExpectedType = SourceType.HTML;
+            return src;
+        }
+
+        /** HTML URL 소스 생성 (CSS/Font/정적자원 설정 포함) */
+        public static PdfSource ofHtmlUrl(String url, String staticResourceBasePath, String cssPath, String fontPath, Class<?> resourceClass, String... cssSelectors) {
+            var src = ofHtmlUrl(url);
+            src.staticResourceBasePath = staticResourceBasePath;
+            src.cssPath = cssPath;
+            src.fontPath = fontPath;
+            src.resourceClass = resourceClass;
+            src.cssSelectors = cssSelectors;
+            return src;
+        }
+
+        /** PDF URL 소스 생성 (원격 PDF 파일 다운로드 후 병합) */
+        public static PdfSource ofPdfUrl(String url) {
+            var src = ofUrl(url);
+            src.urlExpectedType = SourceType.PDF;
+            return src;
+        }
+
+        /** 이미지 URL 소스 생성 (원격 이미지 파일 다운로드 후 PDF 페이지 변환) */
+        public static PdfSource ofImageUrl(String url) {
+            var src = ofUrl(url);
+            src.urlExpectedType = SourceType.IMAGE;
+            return src;
+        }
+
+        /** HTTP 헤더 추가/설정 */
+        public PdfSource headers(Map<String, String> headers) {
+            this.httpHeaders = headers;
+            return this;
+        }
+
+        /** HTTP 요청 타임아웃 설정 */
+        public PdfSource timeout(Duration timeout) {
+            if (timeout != null) {
+                this.timeout = timeout;
+            }
+            return this;
+        }
+
+        /** 스트림 자동 닫기 여부 설정 (기본값: true) */
+        public PdfSource autoClose(boolean autoClose) {
+            this.autoCloseStream = autoClose;
+            return this;
+        }
+
+        @Override
+        public void close() {
+            if (autoCloseStream && inputStream != null) {
+                S2StreamUtil.closeStream(inputStream);
+            }
+        }
+    }
+
+    /**
+     * 다중 소스(PDF, HTML, 이미지, 텍스트, SVG)를 단일 PDF 문서로 병합한다.
+     * <p>대용량 문서 병합 시에도 메모리 누수(OOM)가 발생하지 않도록 PDFBox 임시 파일 스트림 캐시를 활용하며,
+     * 반환되는 InputStream이 닫힐 때 모든 임시 리소스가 디스크에서 자동으로 삭제됩니다.</p>
+     *
+     * @param sources 병합할 문서 소스 목록
+     * @return 병합된 PDF 스트림 (S2ResourceInputStream - close 시 임시 파일 자동 정리)
+     * @throws IOException 입출력 또는 변환 오류 시
+     */
+    /**
+     * 임시 파일을 생성하고 JVM 종료 시 자동 삭제 플래그(deleteOnExit)를 설정한 후 추적 목록에 등록한다.
+     */
+    private static Path createTrackedTempFile(String prefix, String suffix, List<Path> trackingList) throws IOException {
+        var tempFile = Files.createTempFile(S2Uuid.generateUuidV7() + "_" + prefix + "_", suffix);
+        tempFile.toFile().deleteOnExit(); // JVM 비정상 종료 시 디스크 누수 방지 백업
+        if (trackingList != null) {
+            trackingList.add(tempFile);
+        }
+        return tempFile;
+    }
+
+    /**
+     * 다중 소스(PDF, HTML, 이미지, 텍스트, SVG, URL)를 사용자가 지정한 순서 그대로 단일 PDF 문서로 병합한다.
+     * <p>
+     * <b>순서 보장:</b> 여러 소스 타입이 혼합되어 있어도 입력된 {@code sources} 리스트의 인덱스 순서대로 정확하게 결합됩니다.<br>
+     * <b>분산 병렬 I/O 최적화:</b> 원격 URL 리소스들이 다수 포함되어 있을 경우, {@link S2ThreadUtil#getCommonExecutor()}를
+     * 활용하여 백그라운드에서 비동기 병렬로 미리 다운로드(Pre-fetch)하면서도, 최종 병합 시에는 원래의 순서를 100% 유지합니다.<br>
+     * <b>메모리 누수 방지:</b> 모든 중간 임시 파일은 작업 완료(성공/실패 무관) 즉시 삭제되며, 최종 스트림은 {@link S2ResourceInputStream}으로
+     * 반환되어 호출자가 닫을 때 자동으로 임시 파일이 삭제됩니다.
+     * </p>
+     *
+     * @param sources 병합할 문서 소스 목록
+     * @return 병합된 PDF 스트림 (S2ResourceInputStream - close 시 임시 파일 자동 정리)
+     * @throws IOException 입출력 또는 변환 오류 시
+     */
+    public static InputStream merge(List<PdfSource> sources) throws IOException {
+        if (sources == null || sources.isEmpty()) {
+            throw new IllegalArgumentException("[merge] sources must not be null or empty.");
+        }
+
+        var intermediateTempFiles = new ArrayList<Path>();
+        var merger = new PDFMergerUtility();
+        Path finalMergedTempFile = null;
+        boolean success = false;
+
+        // 원격 URL 소스 비동기 분산 병렬 다운로드 (원래 인덱스를 키로 보존하여 순서 보장)
+        var urlFutures = new HashMap<Integer, CompletableFuture<UrlFetchResult>>();
+        for (int i = 0; i < sources.size(); i++) {
+            var source = sources.get(i);
+            if (source != null && source.type == PdfSource.SourceType.URL) {
+                final var s = source;
+                urlFutures.put(i, CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return fetchUrlContent(s);
+                    } catch (IOException e) {
+                        throw new CompletionException(e);
+                    }
+                }, S2ThreadUtil.getCommonExecutor()));
+            }
+        }
+
+        try {
+            for (int i = 0; i < sources.size(); i++) {
+                var source = sources.get(i);
+                if (source == null) {
+                    continue;
+                }
+
+                File pdfFileToMerge = null;
+
+                switch (source.type) {
+                    case PDF -> {
+                        if (source.fileData != null) {
+                            pdfFileToMerge = source.fileData;
+                        } else if (source.pathData != null) {
+                            pdfFileToMerge = source.pathData.toFile();
+                        } else if (source.byteData != null) {
+                            var tempFile = createTrackedTempFile("src", ".pdf", intermediateTempFiles);
+                            Files.write(tempFile, source.byteData);
+                            pdfFileToMerge = tempFile.toFile();
+                        } else if (source.inputStream != null) {
+                            var tempFile = createTrackedTempFile("src", ".pdf", intermediateTempFiles);
+                            Files.copy(source.inputStream, tempFile, StandardCopyOption.REPLACE_EXISTING);
+                            pdfFileToMerge = tempFile.toFile();
+                        }
+                    }
+                    case HTML -> {
+                        var tempFile = createTrackedTempFile("html", ".pdf", intermediateTempFiles);
+                        var pdfBytes = renderHtmlToPdfBytes(
+                                source.textOrHtmlContent,
+                                source.staticResourceBasePath,
+                                source.cssPath,
+                                source.fontPath,
+                                source.resourceClass != null ? source.resourceClass : S2PdfUtil.class,
+                                source.cssSelectors
+                        );
+                        Files.write(tempFile, pdfBytes);
+                        pdfFileToMerge = tempFile.toFile();
+                    }
+                    case IMAGE -> {
+                        var tempFile = createTrackedTempFile("img", ".pdf", intermediateTempFiles);
+                        if (source.imageObj != null) {
+                            renderImageToPdfFile(source.imageObj, null, tempFile);
+                        } else {
+                            byte[] imageBytes;
+                            if (source.fileData != null) {
+                                imageBytes = Files.readAllBytes(source.fileData.toPath());
+                            } else if (source.pathData != null) {
+                                imageBytes = Files.readAllBytes(source.pathData);
+                            } else if (source.byteData != null) {
+                                imageBytes = source.byteData;
+                            } else {
+                                imageBytes = IOUtils.toByteArray(source.inputStream);
+                            }
+                            renderImageToPdfFile(null, imageBytes, tempFile);
+                        }
+                        pdfFileToMerge = tempFile.toFile();
+                    }
+                    case TEXT -> {
+                        var tempFile = createTrackedTempFile("txt", ".pdf", intermediateTempFiles);
+                        var safeHtml = convertTextToHtml(source.textOrHtmlContent);
+                        var pdfBytes = renderHtmlToPdfBytes(safeHtml, null, null, null, S2PdfUtil.class);
+                        Files.write(tempFile, pdfBytes);
+                        pdfFileToMerge = tempFile.toFile();
+                    }
+                    case SVG -> {
+                        var tempFile = createTrackedTempFile("svg", ".pdf", intermediateTempFiles);
+                        var safeHtml = convertSvgToHtml(source.textOrHtmlContent);
+                        var pdfBytes = renderHtmlToPdfBytes(safeHtml, null, null, null, S2PdfUtil.class);
+                        Files.write(tempFile, pdfBytes);
+                        pdfFileToMerge = tempFile.toFile();
+                    }
+                    case URL -> {
+                        var future = urlFutures.get(i);
+                        UrlFetchResult fetched;
+                        try {
+                            fetched = (future != null) ? future.join() : fetchUrlContent(source);
+                        } catch (CompletionException ce) {
+                            if (ce.getCause() instanceof IOException ioe) {
+                                throw ioe;
+                            }
+                            throw new IOException("URL 병합 처리 오류: " + ce.getMessage(), ce);
+                        }
+
+                        var effectiveType = source.urlExpectedType != null
+                                ? source.urlExpectedType
+                                : detectTypeFromUrlAndContent(fetched.contentType, fetched.data, source.urlString);
+
+                        var responseCharset = parseCharsetFromContentType(fetched.contentType, StandardCharsets.UTF_8);
+
+                        switch (effectiveType) {
+                            case PDF -> {
+                                var tempFile = createTrackedTempFile("url_pdf", ".pdf", intermediateTempFiles);
+                                Files.write(tempFile, fetched.data);
+                                pdfFileToMerge = tempFile.toFile();
+                            }
+                            case HTML -> {
+                                var htmlContent = new String(fetched.data, responseCharset);
+                                var tempFile = createTrackedTempFile("url_html", ".pdf", intermediateTempFiles);
+                                var pdfBytes = renderHtmlToPdfBytes(
+                                        htmlContent,
+                                        source.staticResourceBasePath,
+                                        source.cssPath,
+                                        source.fontPath,
+                                        source.resourceClass != null ? source.resourceClass : S2PdfUtil.class,
+                                        source.cssSelectors
+                                );
+                                Files.write(tempFile, pdfBytes);
+                                pdfFileToMerge = tempFile.toFile();
+                            }
+                            case IMAGE -> {
+                                var tempFile = createTrackedTempFile("url_img", ".pdf", intermediateTempFiles);
+                                renderImageToPdfFile(null, fetched.data, tempFile);
+                                pdfFileToMerge = tempFile.toFile();
+                            }
+                            case SVG -> {
+                                var svgContent = new String(fetched.data, responseCharset);
+                                var tempFile = createTrackedTempFile("url_svg", ".pdf", intermediateTempFiles);
+                                var safeHtml = convertSvgToHtml(svgContent);
+                                var pdfBytes = renderHtmlToPdfBytes(safeHtml, null, null, null, S2PdfUtil.class);
+                                Files.write(tempFile, pdfBytes);
+                                pdfFileToMerge = tempFile.toFile();
+                            }
+                            case TEXT -> {
+                                var textContent = new String(fetched.data, responseCharset);
+                                var tempFile = createTrackedTempFile("url_txt", ".pdf", intermediateTempFiles);
+                                var safeHtml = convertTextToHtml(textContent);
+                                var pdfBytes = renderHtmlToPdfBytes(safeHtml, null, null, null, S2PdfUtil.class);
+                                Files.write(tempFile, pdfBytes);
+                                pdfFileToMerge = tempFile.toFile();
+                            }
+                            default -> throw new IOException("URL 콘텐츠의 타입을 처리할 수 없습니다: " + source.urlString);
+                        }
+                    }
+                }
+
+                if (pdfFileToMerge != null) {
+                    merger.addSource(pdfFileToMerge);
+                }
+            }
+
+            // 최종 병합 대상 임시 파일 생성
+            finalMergedTempFile = Files.createTempFile(S2Uuid.generateUuidV7() + "_merged_", ".pdf");
+            finalMergedTempFile.toFile().deleteOnExit();
+            S2FileUtil.makeDirectory(finalMergedTempFile.getParent());
+
+            try (var out = new BufferedOutputStream(Files.newOutputStream(finalMergedTempFile))) {
+                merger.setDestinationStream(out);
+                // 힙 메모리 OOM 방지: 임시 파일 기반 디스크 스트림 캐시 사용
+                merger.mergeDocuments(IOUtils.createTempFileOnlyStreamCache());
+            }
+
+            var resultStream = new S2ResourceInputStream(new BufferedInputStream(Files.newInputStream(finalMergedTempFile)), finalMergedTempFile);
+            success = true;
+            return resultStream;
+        } finally {
+            // 실패 또는 작업 종료 시 미완료된 백그라운드 비동기 다운로드 작업 즉시 취소
+            for (var future : urlFutures.values()) {
+                if (!future.isDone()) {
+                    future.cancel(true);
+                }
+            }
+            if (!success && finalMergedTempFile != null) {
+                try {
+                    Files.deleteIfExists(finalMergedTempFile);
+                } catch (Exception ignore) {
+                }
+            }
+            // 중간에 생성된 변환 임시 파일들은 병합 완료 즉시 모두 삭제하여 디스크 누수 방지
+            for (var tempPath : intermediateTempFiles) {
+                try {
+                    Files.deleteIfExists(tempPath);
+                } catch (Exception ignore) {
+                }
+            }
+            // 소스 스트림 자동 닫기
+            for (var source : sources) {
+                if (source != null) {
+                    source.close();
+                }
+            }
+        }
+    }
+
+    /**
+     * 다중 소스(PDF, HTML, 이미지, 텍스트, SVG)를 단일 PDF 문서로 병합한다. (가변인자)
+     *
+     * @param sources 병합할 문서 소스 목록 가변인자
+     * @return 병합된 PDF 스트림 (S2ResourceInputStream)
+     * @throws IOException 입출력 오류 시
+     */
+    public static InputStream merge(PdfSource... sources) throws IOException {
+        if (sources == null || sources.length == 0) {
+            throw new IllegalArgumentException("[merge] sources must not be null or empty.");
+        }
+        return merge(Arrays.asList(sources));
+    }
+
+    /**
+     * 여러 개의 PDF InputStream 을 단일 PDF 로 병합한다.
+     *
+     * @param pdfStreams         병합할 PDF InputStream 목록
+     * @param shouldCloseStreams 병합 후 입력 스트림들을 자동으로 닫을지 여부
+     * @return 병합된 PDF 스트림 (S2ResourceInputStream)
+     * @throws IOException 입출력 오류 시
+     */
+    public static InputStream mergePdfs(List<InputStream> pdfStreams, boolean shouldCloseStreams) throws IOException {
+        if (pdfStreams == null || pdfStreams.isEmpty()) {
+            throw new IllegalArgumentException("[mergePdfs] pdfStreams must not be null or empty.");
+        }
+        var sources = new ArrayList<PdfSource>();
+        for (var stream : pdfStreams) {
+            if (stream != null) {
+                sources.add(PdfSource.ofPdf(stream).autoClose(shouldCloseStreams));
+            }
+        }
+        return merge(sources);
+    }
+
+    /**
+     * 여러 개의 PDF InputStream 을 단일 PDF 로 병합한다. (입력 스트림 자동 close)
+     *
+     * @param pdfStreams 병합할 PDF InputStream 가변인자
+     * @return 병합된 PDF 스트림 (S2ResourceInputStream)
+     * @throws IOException 입출력 오류 시
+     */
+    public static InputStream mergePdfs(InputStream... pdfStreams) throws IOException {
+        if (pdfStreams == null || pdfStreams.length == 0) {
+            throw new IllegalArgumentException("[mergePdfs] pdfStreams must not be null or empty.");
+        }
+        return mergePdfs(Arrays.asList(pdfStreams), true);
+    }
+
+    /**
+     * 여러 개의 PDF 파일들을 단일 PDF 로 병합한다.
+     *
+     * @param pdfFiles 병합할 PDF 파일 목록
+     * @return 병합된 PDF 스트림 (S2ResourceInputStream)
+     * @throws IOException 입출력 오류 시
+     */
+    public static InputStream mergePdfFiles(List<File> pdfFiles) throws IOException {
+        if (pdfFiles == null || pdfFiles.isEmpty()) {
+            throw new IllegalArgumentException("[mergePdfFiles] pdfFiles must not be null or empty.");
+        }
+        var sources = new ArrayList<PdfSource>();
+        for (var file : pdfFiles) {
+            if (file != null && file.exists()) {
+                sources.add(PdfSource.ofPdf(file));
+            }
+        }
+        return merge(sources);
+    }
+
+    /**
+     * 여러 개의 PDF 파일들을 단일 PDF 로 병합한다. (가변인자)
+     *
+     * @param pdfFiles 병합할 PDF 파일 가변인자
+     * @return 병합된 PDF 스트림 (S2ResourceInputStream)
+     * @throws IOException 입출력 오류 시
+     */
+    public static InputStream mergePdfFiles(File... pdfFiles) throws IOException {
+        if (pdfFiles == null || pdfFiles.length == 0) {
+            throw new IllegalArgumentException("[mergePdfFiles] pdfFiles must not be null or empty.");
+        }
+        return mergePdfFiles(Arrays.asList(pdfFiles));
+    }
+
+    /**
+     * 여러 개의 PDF Path 들을 단일 PDF 로 병합한다.
+     *
+     * @param pdfPaths 병합할 PDF Path 목록
+     * @return 병합된 PDF 스트림 (S2ResourceInputStream)
+     * @throws IOException 입출력 오류 시
+     */
+    public static InputStream mergePdfPaths(List<Path> pdfPaths) throws IOException {
+        if (pdfPaths == null || pdfPaths.isEmpty()) {
+            throw new IllegalArgumentException("[mergePdfPaths] pdfPaths must not be null or empty.");
+        }
+        var sources = new ArrayList<PdfSource>();
+        for (var path : pdfPaths) {
+            if (path != null && Files.exists(path)) {
+                sources.add(PdfSource.ofPdf(path));
+            }
+        }
+        return merge(sources);
+    }
+
+    /**
+     * 여러 개의 PDF Path 들을 단일 PDF 로 병합한다. (가변인자)
+     *
+     * @param pdfPaths 병합할 PDF Path 가변인자
+     * @return 병합된 PDF 스트림 (S2ResourceInputStream)
+     * @throws IOException 입출력 오류 시
+     */
+    public static InputStream mergePdfPaths(Path... pdfPaths) throws IOException {
+        if (pdfPaths == null || pdfPaths.length == 0) {
+            throw new IllegalArgumentException("[mergePdfPaths] pdfPaths must not be null or empty.");
+        }
+        return mergePdfPaths(Arrays.asList(pdfPaths));
+    }
+
+    /**
+     * 표지 HTML 과 본문 PDF 파일들을 한 번에 단일 PDF 로 병합한다. (Goono-ELN 연구노트 다운로드 특화 편의 메서드)
+     *
+     * @param coverHtml          표지 HTML 문자열
+     * @param notePdfStreams     본문 PDF InputStream 목록
+     * @param fontPath           표지 렌더링에 사용할 폰트 경로 (null 가능)
+     * @param clazz              리소스 참조 클래스 (null 가능)
+     * @param shouldCloseStreams 본문 PDF 스트림들을 자동으로 닫을지 여부
+     * @return 병합된 최종 PDF 스트림 (S2ResourceInputStream)
+     * @throws IOException 변환 또는 병합 오류 시
+     */
+    public static InputStream mergeHtmlAndPdfs(String coverHtml, List<InputStream> notePdfStreams, String fontPath, Class<?> clazz, boolean shouldCloseStreams) throws IOException {
+        var sources = new ArrayList<PdfSource>();
+
+        if (coverHtml != null && !coverHtml.isBlank()) {
+            sources.add(PdfSource.ofHtml(coverHtml, null, null, fontPath, clazz));
+        }
+
+        if (notePdfStreams != null) {
+            for (var stream : notePdfStreams) {
+                if (stream != null) {
+                    sources.add(PdfSource.ofPdf(stream).autoClose(shouldCloseStreams));
+                }
+            }
+        }
+
+        return merge(sources);
+    }
+
+    /**
+     * 여러 이미지를 A4 용지 규격에 맞춰 단일 PDF 문서로 병합한다.
+     *
+     * @param imageStreams       이미지 InputStream 목록 (PNG, JPG, GIF 등)
+     * @param shouldCloseStreams 입력 스트림 자동 닫기 여부
+     * @return 병합된 PDF 스트림 (S2ResourceInputStream)
+     * @throws IOException 변환 오류 시
+     */
+    public static InputStream mergeImagesToPdf(List<InputStream> imageStreams, boolean shouldCloseStreams) throws IOException {
+        if (imageStreams == null || imageStreams.isEmpty()) {
+            throw new IllegalArgumentException("[mergeImagesToPdf] imageStreams must not be null or empty.");
+        }
+        var sources = new ArrayList<PdfSource>();
+        for (var stream : imageStreams) {
+            if (stream != null) {
+                sources.add(PdfSource.ofImage(stream).autoClose(shouldCloseStreams));
+            }
+        }
+        return merge(sources);
+    }
+
+    /**
+     * 여러 이미지를 A4 용지 규격에 맞춰 단일 PDF 문서로 병합한다. (입력 스트림 자동 close)
+     *
+     * @param imageStreams 이미지 InputStream 가변인자
+     * @return 병합된 PDF 스트림 (S2ResourceInputStream)
+     * @throws IOException 변환 오류 시
+     */
+    public static InputStream mergeImagesToPdf(InputStream... imageStreams) throws IOException {
+        if (imageStreams == null || imageStreams.length == 0) {
+            throw new IllegalArgumentException("[mergeImagesToPdf] imageStreams must not be null or empty.");
+        }
+        return mergeImagesToPdf(Arrays.asList(imageStreams), true);
+    }
+
+    /**
+     * 여러 이미지 파일(File)들을 A4 용지 규격에 맞춰 단일 PDF 문서로 병합한다.
+     *
+     * @param imageFiles 이미지 파일 목록
+     * @return 병합된 PDF 스트림 (S2ResourceInputStream)
+     * @throws IOException 변환 오류 시
+     */
+    public static InputStream mergeImageFiles(List<File> imageFiles) throws IOException {
+        if (imageFiles == null || imageFiles.isEmpty()) {
+            throw new IllegalArgumentException("[mergeImageFiles] imageFiles must not be null or empty.");
+        }
+        var sources = new ArrayList<PdfSource>();
+        for (var file : imageFiles) {
+            if (file != null && file.exists()) {
+                sources.add(PdfSource.ofImage(file));
+            }
+        }
+        return merge(sources);
+    }
+
+    /**
+     * 여러 이미지 파일(File)들을 A4 용지 규격에 맞춰 단일 PDF 문서로 병합한다. (가변인자)
+     *
+     * @param imageFiles 이미지 파일 가변인자
+     * @return 병합된 PDF 스트림 (S2ResourceInputStream)
+     * @throws IOException 변환 오류 시
+     */
+    public static InputStream mergeImageFiles(File... imageFiles) throws IOException {
+        if (imageFiles == null || imageFiles.length == 0) {
+            throw new IllegalArgumentException("[mergeImageFiles] imageFiles must not be null or empty.");
+        }
+        return mergeImageFiles(Arrays.asList(imageFiles));
+    }
+
+    /**
+     * 여러 이미지 경로(Path)들을 A4 용지 규격에 맞춰 단일 PDF 문서로 병합한다.
+     *
+     * @param imagePaths 이미지 경로 목록
+     * @return 병합된 PDF 스트림 (S2ResourceInputStream)
+     * @throws IOException 변환 오류 시
+     */
+    public static InputStream mergeImagePaths(List<Path> imagePaths) throws IOException {
+        if (imagePaths == null || imagePaths.isEmpty()) {
+            throw new IllegalArgumentException("[mergeImagePaths] imagePaths must not be null or empty.");
+        }
+        var sources = new ArrayList<PdfSource>();
+        for (var path : imagePaths) {
+            if (path != null && Files.exists(path)) {
+                sources.add(PdfSource.ofImage(path));
+            }
+        }
+        return merge(sources);
+    }
+
+    /**
+     * 여러 이미지 경로(Path)들을 A4 용지 규격에 맞춰 단일 PDF 문서로 병합한다. (가변인자)
+     *
+     * @param imagePaths 이미지 경로 가변인자
+     * @return 병합된 PDF 스트림 (S2ResourceInputStream)
+     * @throws IOException 변환 오류 시
+     */
+    public static InputStream mergeImagePaths(Path... imagePaths) throws IOException {
+        if (imagePaths == null || imagePaths.length == 0) {
+            throw new IllegalArgumentException("[mergeImagePaths] imagePaths must not be null or empty.");
+        }
+        return mergeImagePaths(Arrays.asList(imagePaths));
+    }
+
+    /**
+     * 여러 BufferedImage 객체들을 A4 용지 규격에 맞춰 단일 PDF 문서로 병합한다.
+     *
+     * @param images BufferedImage 목록
+     * @return 병합된 PDF 스트림 (S2ResourceInputStream)
+     * @throws IOException 변환 오류 시
+     */
+    public static InputStream mergeImagesToPdf(List<BufferedImage> images) throws IOException {
+        if (images == null || images.isEmpty()) {
+            throw new IllegalArgumentException("[mergeImagesToPdf] images must not be null or empty.");
+        }
+        var sources = new ArrayList<PdfSource>();
+        for (var image : images) {
+            if (image != null) {
+                sources.add(PdfSource.ofImage(image));
+            }
+        }
+        return merge(sources);
+    }
+
+    /**
+     * 여러 BufferedImage 객체들을 A4 용지 규격에 맞춰 단일 PDF 문서로 병합한다. (가변인자)
+     *
+     * @param images BufferedImage 가변인자
+     * @return 병합된 PDF 스트림 (S2ResourceInputStream)
+     * @throws IOException 변환 오류 시
+     */
+    public static InputStream mergeImagesToPdf(BufferedImage... images) throws IOException {
+        if (images == null || images.length == 0) {
+            throw new IllegalArgumentException("[mergeImagesToPdf] images must not be null or empty.");
+        }
+        return mergeImagesToPdf(Arrays.asList(images));
+    }
+
+    /**
+     * 단일 이미지 스트림을 A4 규격(비율 유지 및 여백 포함) PDF 스트림으로 변환한다.
+     *
+     * @param imageStream       이미지 InputStream
+     * @param shouldCloseStream 입력 스트림 자동 닫기 여부
+     * @return 생성된 PDF 스트림 (S2ResourceInputStream)
+     * @throws IOException 이미지 읽기 또는 PDF 생성 오류 시
+     */
+    public static InputStream convertImageToPdf(InputStream imageStream, boolean shouldCloseStream) throws IOException {
+        try {
+            var imageBytes = IOUtils.toByteArray(imageStream);
+            return convertImageToPdf(imageBytes);
+        } finally {
+            if (shouldCloseStream) {
+                S2StreamUtil.closeStream(imageStream);
+            }
+        }
+    }
+
+    /**
+     * 단일 이미지 byte[] 데이터를 A4 규격(비율 유지 및 여백 포함) PDF 스트림으로 변환한다.
+     *
+     * @param imageBytes 이미지 byte 배열
+     * @return 생성된 PDF 스트림 (S2ResourceInputStream)
+     * @throws IOException 이미지 읽기 또는 PDF 생성 오류 시
+     */
+    public static InputStream convertImageToPdf(byte[] imageBytes) throws IOException {
+        var tempFile = Files.createTempFile(S2Uuid.generateUuidV7() + "_img_", ".pdf");
+        boolean success = false;
+        try {
+            renderImageToPdfFile(null, imageBytes, tempFile);
+            var is = new S2ResourceInputStream(new BufferedInputStream(Files.newInputStream(tempFile)), tempFile);
+            success = true;
+            return is;
+        } finally {
+            if (!success) {
+                try {
+                    Files.deleteIfExists(tempFile);
+                } catch (Exception ignore) {
+                }
+            }
+        }
+    }
+
+    /**
+     * 단일 BufferedImage 객체를 A4 규격(비율 유지 및 여백 포함) PDF 스트림으로 변환한다.
+     *
+     * @param image BufferedImage 객체
+     * @return 생성된 PDF 스트림 (S2ResourceInputStream)
+     * @throws IOException 이미지 읽기 또는 PDF 생성 오류 시
+     */
+    public static InputStream convertImageToPdf(BufferedImage image) throws IOException {
+        var tempFile = Files.createTempFile(S2Uuid.generateUuidV7() + "_img_", ".pdf");
+        boolean success = false;
+        try {
+            renderImageToPdfFile(image, null, tempFile);
+            var is = new S2ResourceInputStream(new BufferedInputStream(Files.newInputStream(tempFile)), tempFile);
+            success = true;
+            return is;
+        } finally {
+            if (!success) {
+                try {
+                    Files.deleteIfExists(tempFile);
+                } catch (Exception ignore) {
+                }
+            }
+        }
+    }
+
+    /**
+     * 단일 이미지 File 을 A4 규격(비율 유지 및 여백 포함) PDF 스트림으로 변환한다.
+     *
+     * @param imageFile 이미지 파일
+     * @return 생성된 PDF 스트림 (S2ResourceInputStream)
+     * @throws IOException 이미지 읽기 또는 PDF 생성 오류 시
+     */
+    public static InputStream convertImageToPdf(File imageFile) throws IOException {
+        return convertImageToPdf(Files.readAllBytes(Objects.requireNonNull(imageFile, "[convertImageToPdf] imageFile must not be null").toPath()));
+    }
+
+    /**
+     * 단일 이미지 Path 를 A4 규격(비율 유지 및 여백 포함) PDF 스트림으로 변환한다.
+     *
+     * @param imagePath 이미지 경로
+     * @return 생성된 PDF 스트림 (S2ResourceInputStream)
+     * @throws IOException 이미지 읽기 또는 PDF 생성 오류 시
+     */
+    public static InputStream convertImageToPdf(Path imagePath) throws IOException {
+        return convertImageToPdf(Files.readAllBytes(Objects.requireNonNull(imagePath, "[convertImageToPdf] imagePath must not be null")));
+    }
+
+    /**
+     * SVG 벡터 그래픽 문자열을 단일 벡터 PDF 스트림으로 변환한다.
+     *
+     * @param svgContent SVG XML 문자열
+     * @return 생성된 PDF 스트림 (S2ResourceInputStream)
+     * @throws IOException 변환 오류 시
+     */
+    public static InputStream convertSvgToPdf(String svgContent) throws IOException {
+        var safeHtml = convertSvgToHtml(svgContent);
+        return convertHtmlToPdfStream(safeHtml, null, null, null, S2PdfUtil.class);
+    }
+
+    /**
+     * SVG 벡터 그래픽 스트림을 단일 벡터 PDF 스트림으로 변환한다.
+     *
+     * @param svgStream         SVG InputStream
+     * @param shouldCloseStream 입력 스트림 자동 닫기 여부
+     * @return 생성된 PDF 스트림 (S2ResourceInputStream)
+     * @throws IOException 변환 오류 시
+     */
+    public static InputStream convertSvgToPdf(InputStream svgStream, boolean shouldCloseStream) throws IOException {
+        try {
+            var svg = new String(IOUtils.toByteArray(svgStream), StandardCharsets.UTF_8);
+            return convertSvgToPdf(svg);
+        } finally {
+            if (shouldCloseStream) {
+                S2StreamUtil.closeStream(svgStream);
+            }
+        }
+    }
+
+    /**
+     * SVG 파일 경로(Path)를 단일 벡터 PDF 스트림으로 변환한다.
+     *
+     * @param svgPath SVG 파일 경로
+     * @return 생성된 PDF 스트림 (S2ResourceInputStream)
+     * @throws IOException 변환 오류 시
+     */
+    public static InputStream convertSvgToPdf(Path svgPath) throws IOException {
+        return convertSvgToPdf(Files.readString(Objects.requireNonNull(svgPath, "[convertSvgToPdf] svgPath must not be null"), StandardCharsets.UTF_8));
+    }
+
+    /**
+     * 일반 텍스트를 A4 서식 PDF 스트림으로 변환한다.
+     *
+     * @param plainText 일반 텍스트 내용
+     * @return 생성된 PDF 스트림 (S2ResourceInputStream)
+     * @throws IOException 변환 오류 시
+     */
+    public static InputStream convertTextToPdfStream(String plainText) throws IOException {
+        var safeHtml = convertTextToHtml(plainText);
+        return convertHtmlToPdfStream(safeHtml, null, null, null, S2PdfUtil.class);
+    }
+
+    /**
+     * 일반 텍스트 스트림을 A4 서식 PDF 스트림으로 변환한다.
+     *
+     * @param textStream         텍스트 InputStream
+     * @param shouldCloseStream 입력 스트림 자동 닫기 여부
+     * @return 생성된 PDF 스트림 (S2ResourceInputStream)
+     * @throws IOException 변환 오류 시
+     */
+    public static InputStream convertTextToPdfStream(InputStream textStream, boolean shouldCloseStream) throws IOException {
+        try {
+            var text = new String(IOUtils.toByteArray(textStream), StandardCharsets.UTF_8);
+            return convertTextToPdfStream(text);
+        } finally {
+            if (shouldCloseStream) {
+                S2StreamUtil.closeStream(textStream);
+            }
+        }
+    }
+
+    /**
+     * HTML 문자열을 PDF {@link InputStream} 으로 직접 변환한다.
+     * <p>
+     * 반환되는 스트림은 {@link S2ResourceInputStream} 인스턴스이며,
+     * 스트림을 모두 사용한 후 {@code close()}를 호출하면 백킹(backing) 임시 파일이 디스크에서 100% 자동 삭제됩니다.<br>
+     * 웹 애플리케이션에서 클라이언트에 PDF 파일을 바로 스트리밍 다운로드할 때 매우 유용합니다.
+     * </p>
+     *
+     * @param htmlContent                              변환할 HTML 문자열
+     * @param staticResourceBasePath                   정적 자원 웹 기본 경로 (예: {@code "/static"}, null 가능)
+     * @param cssPath                                  CSS 파일 경로 (복수 개인 경우 쉼표(,) 구분, null 가능)
+     * @param fontPath                                 한글/영문 TTF/OTF 폰트 파일 경로 (null 가능)
+     * @param clazz                                    정적 자원 로드 기준 Class (보통 {@code getClass()})
+     * @param convertCssBackgroundImageTargetSelectors CSS {@code background-image} 변환 대상 셀렉터 (생략 시 전체)
+     * @return 변환된 PDF 스트림 ({@link S2ResourceInputStream} - close 시 임시 파일 자동 정리)
+     * @throws IOException HTML 렌더링 또는 PDF 생성 오류 시
+     * @apiNote
+     * <pre>{@code
+     * try (InputStream pdfStream = S2PdfUtil.convertHtmlToPdfStream(
+     *         "<h1>영수증 / 인쇄물</h1>",
+     *         "/static",
+     *         "/static/css/print.css",
+     *         "/static/font/NanumGothic.ttf",
+     *         getClass()
+     * )) {
+     *     IOUtils.copy(pdfStream, response.getOutputStream());
+     * }
+     * }</pre>
+     */
+    public static InputStream convertHtmlToPdfStream(String htmlContent, String staticResourceBasePath, String cssPath, String fontPath, Class<?> clazz, String... convertCssBackgroundImageTargetSelectors) throws IOException {
+        var pdfBytes = renderHtmlToPdfBytes(htmlContent, staticResourceBasePath, cssPath, fontPath, clazz, convertCssBackgroundImageTargetSelectors);
+        var tempFile = Files.createTempFile(S2Uuid.generateUuidV7() + "_html_", ".pdf");
+        tempFile.toFile().deleteOnExit();
+        boolean success = false;
+        try {
+            Files.write(tempFile, pdfBytes);
+            var is = new S2ResourceInputStream(new BufferedInputStream(Files.newInputStream(tempFile)), tempFile);
+            success = true;
+            return is;
+        } finally {
+            if (!success) {
+                try {
+                    Files.deleteIfExists(tempFile);
+                } catch (Exception ignore) {
+                }
+            }
+        }
+    }
+
+    /**
+     * 다중 소스(PDF, HTML, 이미지, 텍스트, SVG, URL)를 단일 PDF 로 병합한 후, 전체 문서에 통일된 페이지 번호를 일괄 추가한다.
+     * <p>
+     * 이종 문서들을 병합하면 페이지마다 번호가 없거나 제각각일 수 있습니다. 이 메서드는 전체 병합 문서를 순회하며
+     * 중앙 하단에 "1 / N" 형식의 일관된 페이지 번호를 일괄 각인합니다.
+     * </p>
+     *
+     * @param sources               병합할 문서 소스 목록
+     * @param numberOfPagesToInsert 페이지 번호를 매길 대상 페이지 수 (예: 총 10페이지 중 표지 1장을 제외하고 본문 9장에만 매기려면 9 전달)
+     * @param fontSize              페이지 번호 폰트 크기 (null 시 기본 10pt)
+     * @param fontStream            페이지 번호용 TTF 폰트 스트림 (null 시 기본 Helvetica 폰트 사용, 작업 완료 후 자동 close)
+     * @return 병합 및 페이지 번호가 추가된 최종 PDF 스트림 ({@link S2ResourceInputStream} - close 시 임시 파일 자동 정리)
+     * @throws IOException 입출력 또는 변환 오류 시
+     * @apiNote
+     * <pre>{@code
+     * try (InputStream finalPdf = S2PdfUtil.mergeAndAddPageNumbers(
+     *         List.of(PdfSource.ofHtml(coverHtml), PdfSource.ofPdf(bodyPdf)),
+     *         10, // 10페이지에 번호 부여
+     *         9,  // 9pt 크기
+     *         fontStream
+     * )) {
+     *     // 다운로드 응답
+     * }
+     * }</pre>
+     */
+    public static InputStream mergeAndAddPageNumbers(List<PdfSource> sources, int numberOfPagesToInsert, Integer fontSize, InputStream fontStream) throws IOException {
+        InputStream mergedStream = null;
+        try {
+            mergedStream = merge(sources);
+            return addPageNumbers(mergedStream, numberOfPagesToInsert, fontSize, fontStream, true);
+        } finally {
+            if (mergedStream != null) {
+                S2StreamUtil.closeStream(mergedStream);
+            }
+        }
+    }
+
+    // ========================================================================
+    // 🛠️ 내부 변환 헬퍼 메서드
+    // ========================================================================
+
+    private static byte[] renderHtmlToPdfBytes(String htmlContent, String staticResourceBasePath, String cssPath, String fontPath, Class<?> clazz, String... convertCssBackgroundImageTargetSelectors) throws IOException {
+        var htmlWithImages = embedImages(htmlContent, staticResourceBasePath, convertCssBackgroundImageTargetSelectors);
+        var cssContent = S2Util.isNotEmpty(cssPath) ? loadCssContent(clazz, cssPath, staticResourceBasePath, convertCssBackgroundImageTargetSelectors) : "";
+        var completeHtml = String.format(HTML_TEMPLATE, cssContent, htmlWithImages);
+        var xhtmlContent = convertToXhtml(completeHtml);
+        return createPdf(xhtmlContent, clazz, fontPath);
+    }
+
+    private static void renderImageToPdfFile(BufferedImage bimg, byte[] rawBytes, Path targetPdfFile) throws IOException {
+        if (bimg == null && (rawBytes == null || rawBytes.length == 0)) {
+            throw new IllegalArgumentException("[renderImageToPdfFile] image must not be null or empty.");
+        }
+
+        if (bimg == null) {
+            bimg = ImageIO.read(new ByteArrayInputStream(rawBytes));
+            if (bimg == null) {
+                throw new IOException("지원되지 않는 이미지 포맷이거나 손상된 이미지 파일입니다.");
+            }
+        }
+
+        var imgWidth = (float) bimg.getWidth();
+        var imgHeight = (float) bimg.getHeight();
+
+        // 가로/세로 비율에 맞춰 A4 Portrait 또는 Landscape 결정
+        var pageSize = imgWidth > imgHeight
+                ? new PDRectangle(PDRectangle.A4.getHeight(), PDRectangle.A4.getWidth())
+                : PDRectangle.A4;
+
+        var pageWidth = pageSize.getWidth();
+        var pageHeight = pageSize.getHeight();
+
+        // 20pt 안전 여백 설정
+        var margin = 20f;
+        var maxContentWidth = pageWidth - (margin * 2);
+        var maxContentHeight = pageHeight - (margin * 2);
+
+        // 원본 종횡비(Aspect Ratio)를 유지한 스케일 계산
+        var scale = Math.min(maxContentWidth / imgWidth, maxContentHeight / imgHeight);
+        var drawWidth = imgWidth * scale;
+        var drawHeight = imgHeight * scale;
+
+        // 중앙 정렬 좌표
+        var x = margin + (maxContentWidth - drawWidth) / 2;
+        var y = margin + (maxContentHeight - drawHeight) / 2;
+
+        try (var doc = new PDDocument()) {
+            var page = new PDPage(pageSize);
+            doc.addPage(page);
+
+            byte[] bytesToDraw = rawBytes;
+            if (bytesToDraw == null) {
+                try (var baos = new ByteArrayOutputStream()) {
+                    ImageIO.write(bimg, "PNG", baos);
+                    bytesToDraw = baos.toByteArray();
+                }
+            }
+
+            var pdImage = PDImageXObject.createFromByteArray(doc, bytesToDraw, "img");
+            try (var contentStream = new PDPageContentStream(doc, page)) {
+                contentStream.drawImage(pdImage, x, y, drawWidth, drawHeight);
+            }
+
+            S2FileUtil.makeDirectory(targetPdfFile.getParent());
+            doc.save(targetPdfFile.toFile());
+        } finally {
+            if (bimg != null) {
+                bimg.flush();
+            }
+        }
+    }
+
+    private static String convertTextToHtml(String plainText) {
+        if (plainText == null) {
+            return "<pre></pre>";
+        }
+        var escaped = plainText
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;");
+
+        return "<div style=\"padding: 24px; font-family: monospace, sans-serif; font-size: 10pt; line-height: 1.5; white-space: pre-wrap; word-break: break-all;\">"
+                + escaped
+                + "</div>";
+    }
+
+    private static String convertSvgToHtml(String svgContent) {
+        if (S2Util.isEmpty(svgContent)) {
+            return "<div></div>";
+        }
+        // S2StringUtil.replaceAll: 캐싱된 패턴 재사용으로 String.replaceAll() 대비 성능 우수
+        var cleaned = S2StringUtil.replaceAll(svgContent, "<\\?xml[^>]*\\?>", "");
+        cleaned = S2StringUtil.replaceAll(cleaned, "<!DOCTYPE[^>]*>", "").trim();
+        return "<div style=\"padding: 24px; text-align: center;\">"
+                + cleaned
+                + "</div>";
+    }
+
+    // ========================================================================
+    // 🌐 원격 URL 병합 (URL Merge) 편의 API
+    // ========================================================================
+
+    /**
+     * 여러 개의 원격 웹 URL 리소스(PDF, HTML, 이미지, SVG, 텍스트)를 다운로드하여 사용자가 전달한 순서대로 단일 PDF 로 병합한다.
+     * <p>
+     * <b>비동기 분산 프리페치:</b> 모든 URL 리소스는 {@link S2ThreadUtil#getCommonExecutor()} 기반 백그라운드 병렬 다운로드되어
+     * 대기 시간을 획기적으로 줄이며, 최종 병합 시에는 {@code urls} 목록의 원래 인덱스 순서를 100% 보장합니다.
+     * </p>
+     *
+     * @param urls 병합할 원격 웹 리소스 URL 목록
+     * @return 병합된 PDF 스트림 ({@link S2ResourceInputStream} - close 시 임시 파일 자동 정리)
+     * @throws IOException 네트워크 오류, HTTP 4xx/5xx 응답 또는 변환 실패 시
+     * @apiNote
+     * <pre>{@code
+     * try (InputStream merged = S2PdfUtil.mergeUrls(List.of(
+     *         "https://example.com/cover.jsp",
+     *         "https://example.com/report.pdf",
+     *         "https://example.com/chart.png"
+     * ))) {
+     *     IOUtils.copy(merged, response.getOutputStream());
+     * }
+     * }</pre>
+     */
+    public static InputStream mergeUrls(List<String> urls) throws IOException {
+        if (urls == null || urls.isEmpty()) {
+            throw new IllegalArgumentException("[mergeUrls] urls must not be null or empty.");
+        }
+        var sources = new ArrayList<PdfSource>();
+        for (var url : urls) {
+            if (S2Util.isNotEmpty(url)) {
+                sources.add(PdfSource.ofUrl(url));
+            }
+        }
+        return merge(sources);
+    }
+
+    /**
+     * 여러 개의 원격 웹 URL 리소스(PDF, HTML, 이미지, SVG, 텍스트)를 다운로드하여 단일 PDF 로 병합한다. (가변인자)
+     *
+     * @param urls 병합할 URL 리소스 가변인자
+     * @return 병합된 PDF 스트림 ({@link S2ResourceInputStream} - close 시 임시 파일 자동 정리)
+     * @throws IOException 입출력 또는 변환 오류 시
+     * @see #mergeUrls(List)
+     */
+    public static InputStream mergeUrls(String... urls) throws IOException {
+        if (urls == null || urls.length == 0) {
+            throw new IllegalArgumentException("[mergeUrls] urls must not be null or empty.");
+        }
+        return mergeUrls(Arrays.asList(urls));
+    }
+
+    /**
+     * 단일 웹 URL 리소스(HTML, 이미지, SVG, PDF 등)를 다운로드하여 PDF 스트림으로 변환한다.
+     *
+     * @param url 변환할 웹 리소스 URL
+     * @return 변환된 PDF 스트림 ({@link S2ResourceInputStream} - close 시 임시 파일 자동 정리)
+     * @throws IOException 입출력 또는 변환 오류 시
+     * @apiNote
+     * <pre>{@code
+     * try (InputStream pdfStream = S2PdfUtil.convertUrlToPdf("https://example.com/print/invoice.jsp?id=100")) {
+     *     IOUtils.copy(pdfStream, response.getOutputStream());
+     * }
+     * }</pre>
+     */
+    public static InputStream convertUrlToPdf(String url) throws IOException {
+        return mergeUrls(url);
+    }
+
+    /**
+     * 여러 원격 HTML/JSP URL(표지, 프로젝트 정보 등)과 본문 PDF 스트림들을 단일 PDF 로 병합한다.
+     * <p>
+     * <b>사이냅 뷰어(Synap Viewer) 변환 서버 대체용 편의 메서드:</b><br>
+     * 사이냅 뷰어의 PDF 병합 API({@code callSynapMergePdf})를 외부 상용 서버 없이 완벽하게 자체 대체할 수 있습니다.<br>
+     * 원격 URL들은 비동기 병렬로 미리 프리페치되어 순서대로 결합됩니다.
+     * </p>
+     *
+     * @param htmlUrls           원격 표지/정보 HTML 또는 JSP URL 목록 (null 허용)
+     * @param notePdfStreams     본문 PDF InputStream 목록 (null 허용)
+     * @param shouldCloseStreams 병합 완료 후 {@code notePdfStreams}를 자동으로 닫을지 여부
+     * @return 병합된 최종 PDF 스트림 ({@link S2ResourceInputStream} - close 시 임시 파일 자동 정리)
+     * @throws IOException 네트워크 오류 또는 PDF 변환/병합 오류 시
+     * @apiNote
+     * <pre>{@code
+     * // 사이냅 뷰어 방식의 URL + 로컬 PDF 병합을 자체 엔진으로 완전 대체:
+     * List<String> coverUrls = List.of(
+     *         "http://localhost:8080/eln/cover.jsp?noteId=10",
+     *         "http://localhost:8080/eln/projectInfo.jsp?noteId=10"
+     * );
+     * List<InputStream> notePdfStreams = List.of(
+     *         new FileInputStream("/data/notes/note_page1.pdf"),
+     *         new FileInputStream("/data/notes/note_page2.pdf")
+     * );
+     *
+     * try (InputStream merged = S2PdfUtil.mergeHtmlUrlsAndPdfs(coverUrls, notePdfStreams, true)) {
+     *     IOUtils.copy(merged, response.getOutputStream());
+     * }
+     * }</pre>
+     */
+    public static InputStream mergeHtmlUrlsAndPdfs(List<String> htmlUrls, List<InputStream> notePdfStreams, boolean shouldCloseStreams) throws IOException {
+        var sources = new ArrayList<PdfSource>();
+
+        if (htmlUrls != null) {
+            for (var url : htmlUrls) {
+                if (S2Util.isNotEmpty(url)) {
+                    sources.add(PdfSource.ofHtmlUrl(url));
+                }
+            }
+        }
+
+        if (notePdfStreams != null) {
+            for (var stream : notePdfStreams) {
+                if (stream != null) {
+                    sources.add(PdfSource.ofPdf(stream).autoClose(shouldCloseStreams));
+                }
+            }
+        }
+
+        return merge(sources);
+    }
+
+    /**
+     * 여러 원격 HTML/JSP URL(표지, 프로젝트 정보 등)과 본문 PDF 스트림들을 단일 PDF 로 병합한다. (본문 스트림 자동 close)
+     *
+     * @param htmlUrls       원격 표지/정보 HTML 또는 JSP URL 목록 (null 허용)
+     * @param notePdfStreams 본문 PDF InputStream 목록 (null 허용, 작업 완료 후 자동 close)
+     * @return 병합된 최종 PDF 스트림 ({@link S2ResourceInputStream} - close 시 임시 파일 자동 정리)
+     * @throws IOException 입출력 또는 변환 오류 시
+     * @see #mergeHtmlUrlsAndPdfs(List, List, boolean)
+     */
+    public static InputStream mergeHtmlUrlsAndPdfs(List<String> htmlUrls, List<InputStream> notePdfStreams) throws IOException {
+        return mergeHtmlUrlsAndPdfs(htmlUrls, notePdfStreams, true);
+    }
+
+    /**
+     * 표지 HTML 문자열과 본문 PDF 스트림 목록을 단일 PDF 로 병합한다. (본문 스트림 자동 close)
+     *
+     * @param coverHtml      표지 HTML 문자열 (null 허용)
+     * @param notePdfStreams 본문 PDF InputStream 목록 (null 허용, 작업 완료 후 자동 close)
+     * @return 병합된 최종 PDF 스트림 ({@link S2ResourceInputStream} - close 시 임시 파일 자동 정리)
+     * @throws IOException 변환 또는 병합 오류 시
+     * @apiNote
+     * <pre>{@code
+     * String coverHtml = "<h1>실험 보고서 표지</h1><p>작성자: 홍길동</p>";
+     * try (InputStream merged = S2PdfUtil.mergeHtmlAndPdfs(coverHtml, bodyPdfStreams)) {
+     *     IOUtils.copy(merged, response.getOutputStream());
+     * }
+     * }</pre>
+     */
+    public static InputStream mergeHtmlAndPdfs(String coverHtml, List<InputStream> notePdfStreams) throws IOException {
+        return mergeHtmlAndPdfs(coverHtml, notePdfStreams, null, null, true);
+    }
+
+    // ========================================================================
+    // 🌐 URL 리소스 다운로드 및 타입 감지 내부 헬퍼
+    // ========================================================================
+
+    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
+            .followRedirects(HttpClient.Redirect.NORMAL)
+            .connectTimeout(Duration.ofSeconds(10))
+            .executor(S2ThreadUtil.getCommonExecutor())  // s2-core 공용 실행기 재사용 (스레드 절약)
+            .build();
+
+    private static class UrlFetchResult {
+        final byte[] data;
+        final String contentType;
+
+        UrlFetchResult(byte[] data, String contentType) {
+            this.data = data;
+            this.contentType = contentType;
+        }
+    }
+
+    private static UrlFetchResult fetchUrlContent(PdfSource source) throws IOException {
+        try {
+            var requestBuilder = HttpRequest.newBuilder()
+                    .uri(URI.create(source.urlString))
+                    .timeout(source.timeout != null ? source.timeout : Duration.ofSeconds(30))
+                    .GET();
+
+            if (source.httpHeaders != null) {
+                source.httpHeaders.forEach(requestBuilder::header);
+            }
+
+            var response = HTTP_CLIENT.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofByteArray());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new IOException(String.format("URL 요청 실패 [HTTP %d]: %s", response.statusCode(), source.urlString));
+            }
+
+            var contentType = response.headers().firstValue("Content-Type").orElse("");
+            return new UrlFetchResult(response.body(), contentType);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("URL 다운로드 중 인터럽트 발생: " + source.urlString, e);
+        } catch (Exception e) {
+            if (e instanceof IOException ioe) {
+                throw ioe;
+            }
+            throw new IOException("URL 리소스 다운로드 오류: " + source.urlString + " - " + e.getMessage(), e);
+        }
+    }
+
+    private static PdfSource.SourceType detectTypeFromUrlAndContent(String contentType, byte[] data, String url) {
+        var lowerCt = contentType != null ? contentType.toLowerCase() : "";
+
+        // 1. Content-Type 헤더 기반 감지
+        if (lowerCt.contains("application/pdf")) {
+            return PdfSource.SourceType.PDF;
+        }
+        if (lowerCt.contains("text/html") || lowerCt.contains("application/xhtml+xml")) {
+            return PdfSource.SourceType.HTML;
+        }
+        if (lowerCt.contains("image/svg+xml")) {
+            return PdfSource.SourceType.SVG;
+        }
+        if (lowerCt.startsWith("image/")) {
+            return PdfSource.SourceType.IMAGE;
+        }
+        if (lowerCt.contains("text/plain")) {
+            return PdfSource.SourceType.TEXT;
+        }
+
+        // 2. 바이너리 매직 바이트 / 텍스트 시작부 기반 감지
+        if (data != null && data.length >= 4) {
+            // PDF Magic Bytes: %PDF-
+            if (data[0] == 0x25 && data[1] == 0x50 && data[2] == 0x44 && data[3] == 0x2D) {
+                return PdfSource.SourceType.PDF;
+            }
+            // PNG: 89 50 4E 47
+            if (data[0] == (byte) 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47) {
+                return PdfSource.SourceType.IMAGE;
+            }
+            // JPEG: FF D8 FF
+            if (data[0] == (byte) 0xFF && data[1] == (byte) 0xD8 && data[2] == (byte) 0xFF) {
+                return PdfSource.SourceType.IMAGE;
+            }
+            // GIF: GIF8
+            if (data[0] == 'G' && data[1] == 'I' && data[2] == 'F' && data[3] == '8') {
+                return PdfSource.SourceType.IMAGE;
+            }
+            // BMP: BM
+            if (data[0] == 'B' && data[1] == 'M') {
+                return PdfSource.SourceType.IMAGE;
+            }
+            // WebP: RIFF....WEBP
+            if (data.length >= 12 && data[0] == 'R' && data[1] == 'I' && data[2] == 'F' && data[3] == 'F'
+                    && data[8] == 'W' && data[9] == 'E' && data[10] == 'B' && data[11] == 'P') {
+                return PdfSource.SourceType.IMAGE;
+            }
+
+            // 앞부분 텍스트 검사 (최대 512바이트)
+            int checkLen = Math.min(data.length, 512);
+            var headStr = new String(data, 0, checkLen, StandardCharsets.UTF_8).toLowerCase();
+            if (headStr.contains("<svg")) {
+                return PdfSource.SourceType.SVG;
+            }
+            if (headStr.contains("<html") || headStr.contains("<!doctype html") || headStr.contains("<body") || headStr.contains("<div")) {
+                return PdfSource.SourceType.HTML;
+            }
+        }
+
+        // 3. URL 확장자 기반 감지
+        var lowerUrl = url != null ? url.toLowerCase() : "";
+        var cleanUrl = lowerUrl.contains("?") ? lowerUrl.substring(0, lowerUrl.indexOf('?')) : lowerUrl;
+        if (cleanUrl.endsWith(".pdf")) {
+            return PdfSource.SourceType.PDF;
+        }
+        if (cleanUrl.endsWith(".html") || cleanUrl.endsWith(".htm") || cleanUrl.endsWith(".jsp") || cleanUrl.endsWith(".do")) {
+            return PdfSource.SourceType.HTML;
+        }
+        if (cleanUrl.endsWith(".png") || cleanUrl.endsWith(".jpg") || cleanUrl.endsWith(".jpeg")
+                || cleanUrl.endsWith(".gif") || cleanUrl.endsWith(".bmp") || cleanUrl.endsWith(".webp")) {
+            return PdfSource.SourceType.IMAGE;
+        }
+        if (cleanUrl.endsWith(".svg")) {
+            return PdfSource.SourceType.SVG;
+        }
+        if (cleanUrl.endsWith(".txt") || cleanUrl.endsWith(".log")) {
+            return PdfSource.SourceType.TEXT;
+        }
+
+        // 기본 fallback은 HTML (서버 측 동적 URL 렌더링 결과)
+        return PdfSource.SourceType.HTML;
+    }
+
+    /**
+     * HTTP 응답 Content-Type 헤더에서 charset 인코딩을 추출한다. (지정되지 않았거나 유효하지 않으면 기본값 반환)
+     */
+    private static Charset parseCharsetFromContentType(String contentType, Charset defaultCharset) {
+        if (S2Util.isEmpty(contentType)) {
+            return defaultCharset;
+        }
+        var lower = contentType.toLowerCase();
+        int idx = lower.indexOf("charset=");
+        if (idx != -1) {
+            String csName = contentType.substring(idx + 8).trim();
+            int semiIdx = csName.indexOf(';');
+            if (semiIdx != -1) {
+                csName = csName.substring(0, semiIdx).trim();
+            }
+            csName = S2StringUtil.replaceChars(csName, "", '"', '\'');
+            try {
+                return Charset.forName(csName);
+            } catch (Exception ignore) {
+            }
+        }
+        return defaultCharset;
+    }
+
+}

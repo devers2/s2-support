@@ -1123,10 +1123,7 @@ public class S2FileUtil {
     }
 
     /**
-     * MIME TYPE 으로 확장자를 가져온다.(MIME TYPE 에서 확인되지 않으면 확장자로 확인
-     *
-     * @param sourceFile 대상 파일
-     * @return MIME TYPE
+     * MIME TYPE 에 매핑되는 기본 확장자 맵 (MIME TYPE 에서 확인되지 않으면 확장자로 확인)
      */
     // 매 호출마다 새로 만들 필요 없이 한 번만 초기화해서 재사용한다.
     private static final Map<String, String> MIME_TYPE_TO_EXTENSION = Map.ofEntries(

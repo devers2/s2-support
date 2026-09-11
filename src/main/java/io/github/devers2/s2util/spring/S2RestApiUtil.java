@@ -179,7 +179,7 @@ public class S2RestApiUtil {
 
     /**
      * 주어진 {@link InputStream}, 파일명, 콘텐츠 길이를 이용하여 {@link InputStreamResource}를 생성.
-     * 생성된 {@code InputStreamResource}는 {@link #getFilename()}과 {@link #contentLength()} 메서드를 오버라이드하여 파일명과 콘텐츠 길이를 명시적으로 반환.
+     * 생성된 {@code InputStreamResource}는 {@code getFilename()}과 {@code contentLength()} 메서드를 오버라이드하여 파일명과 콘텐츠 길이를 명시적으로 반환.
      *
      * @param inputStream   전송할 데이터의 {@link InputStream}. (필수)
      * @param filename      다운로드될 확장자를 포함한 파일 이름. (필수)
