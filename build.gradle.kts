@@ -331,6 +331,7 @@ dependencies {
      * - JAR 크기에는 영향 없음 (Shadow 플러그인 미사용 상태이므로 번들링 없이 POM에만 기록됨)
      */
     api(libs.s2.core)
+    compileOnly(libs.jsr305) // JSR-305 (@Nullable 등 Spring 애너테이션 메타데이터 인식 및 Javadoc When.MAYBE 경고 방지)
     compileOnly(libs.spring6.context) // Java 17 이상으로 개발하므로 Spring 6 및 Spring Boot 3 계열이 표준
     compileOnly(libs.spring6.web) // Java 17 이상으로 개발하므로 Spring 6 및 Spring Boot 3 계열이 표준
     compileOnly(libs.spring.integration.sftp)

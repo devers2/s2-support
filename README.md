@@ -63,7 +63,7 @@ Depending on your application's requirements, you can optionally include compani
 | Module | Type & Coordinates | Key Features & Purpose |
 | :--- | :--- | :--- |
 | **`s2-validator`** | Library<br>`io.github.devers2:s2-validator:1.1.8` | **Cross-Platform Dynamic Validator**<br>• Author validation rules once in Java and synchronize seamlessly with client-side JavaScript (`s2.validator.js`).<br>• 30+ built-in rules (email, phone, date, etc.) with smart Korean particle interpolation (`{0|은/는}`).<br>• Fluent chaining API, conditional validation (`when`/`and`), nested/collection object validation.<br>• Seamless Spring MVC integration via `S2BindValidator` (`BindingResult`). |
-| **`s2-validator-plugin`** | Gradle Plugin<br>`id 'io.github.devers2.validator' version '1.1.2'` | **Compile-Time Field Validation** *(Optional companion for `s2-validator`)*<br>• AST-based static analysis during build (`compileJava`).<br>• Inspects `.field("fieldName")` in `S2Validator.<DTO>builder()` to verify fields exist on the target DTO class, preventing field mismatches or refactoring regressions before runtime.<br>• Zero configuration required (Gradle only). |
+| **`s2-validator-plugin`** | Gradle Plugin<br>`id 'io.github.devers2.validator' version '1.1.3'` | **Compile-Time Field Validation** *(Optional companion for `s2-validator`)*<br>• AST-based static analysis during build (`compileJava`).<br>• Inspects `.field("fieldName")` in `S2Validator.<DTO>builder()` to verify fields exist on the target DTO class, preventing field mismatches or refactoring regressions before runtime.<br>• Zero configuration required (Gradle only). |
 | **`s2-jpa`** | Library<br>`io.github.devers2:s2-jpa:1.1.8` | **Dynamic JPQL Query Builder**<br>• Template-based dynamic query construction using `S2Jpql` with `{{=key}}` placeholders.<br>• Fluent conditional parameter and clause binding (`bindClause`, `bindParameter`, `bindOrderBy`).<br>• Safe LIKE search with `LikeMode` (ANYWHERE, START, END) preventing injection. |
 | **`s2-util`** *(Bundle)* | Library<br>`io.github.devers2:s2-util:1.1.8` | **All-in-One Suite**<br>• Full bundle containing `s2-core`, `s2-validator`, and `s2-jpa` libraries together.<br>• *(⚠️ Note: Even with the full bundle, the compile-time validation Gradle plugin must still be added to the `plugins {}` block separately)* |
 
@@ -74,7 +74,7 @@ Depending on your application's requirements, you can optionally include compani
 plugins {
     id 'java'
     // [Optional] Compile-time field validation plugin for S2Validator (Gradle only, declared separately from libraries)
-    id 'io.github.devers2.validator' version '1.1.2'
+    id 'io.github.devers2.validator' version '1.1.3'
 }
 
 dependencies {
@@ -179,6 +179,7 @@ s2-support Version: 1.1.5 (2026-09-11)
 ```groovy
 dependencies {
     // Essential runtime dependencies for optional functionalities
+    implementation 'com.google.code.findbugs:jsr305:3.0.2'
     implementation 'org.springframework:spring-context:6.1.1'
     implementation 'org.springframework:spring-web:6.1.1'
     implementation 'org.springframework.integration:spring-integration-sftp:6.1.1'

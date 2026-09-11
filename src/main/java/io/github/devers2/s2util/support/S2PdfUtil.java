@@ -84,7 +84,7 @@ import io.github.devers2.s2util.log.S2LogManager;
 import io.github.devers2.s2util.log.S2Logger;
 
 /**
- * <h1>S2PdfUtil (고성능 PDF 엔진 & 범용 멀티 포맷 병합기)</h1>
+ * <h1>S2PdfUtil (고성능 PDF 엔진 &amp; 범용 멀티 포맷 병합기)</h1>
  * <p>
  * HTML, 이미지(PNG/JPG/GIF/WebP/BMP), 일반 텍스트, SVG 및 원격 URL 리소스를 고품질 PDF 문서로 변환하고,<br>
  * 다중 이종(異種) 문서 소스를 사용자가 지정한 순서 그대로 메모리 누수 없이 단일 PDF로 병합(Merge)하는 유틸리티 클래스입니다.
