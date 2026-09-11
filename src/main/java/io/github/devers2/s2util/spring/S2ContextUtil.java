@@ -71,7 +71,8 @@ public final class S2ContextUtil {
      * @param schParameterName 찾고자 하는 파라미터 또는 필드명
      * @return 찾은 값 (없으면 null)
      */
-    public static <T> Object getJoinPointParameter(final JoinPoint joinPoint, Class<T> voClass, final String schParameterName) {
+    public static <T> Object getJoinPointParameter(final JoinPoint joinPoint, Class<T> voClass,
+            final String schParameterName) {
         if (joinPoint == null || schParameterName == null) {
             return null;
         }

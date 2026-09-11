@@ -71,7 +71,8 @@ public class S2PaginationInfo<T> {
     }
 
     public S2PaginationInfo(S2SearchVO searchVO, List<T> dataList, String totalRecordCountNm) {
-        var totalRecordCount = totalRecordCountNm != null && !totalRecordCountNm.isBlank() && S2Util.isNotEmpty(dataList) ? S2Util.getValue(dataList.get(0), totalRecordCountNm, 0) : 0;
+        var totalRecordCount = totalRecordCountNm != null && !totalRecordCountNm.isBlank()
+                && S2Util.isNotEmpty(dataList) ? S2Util.getValue(dataList.get(0), totalRecordCountNm, 0) : 0;
         this.searchVO = searchVO;
         this.dataList = dataList;
         this.totalRecordCount = totalRecordCount;
@@ -94,7 +95,8 @@ public class S2PaginationInfo<T> {
             var pageNo = paginationInfo.getPageNo();
             var vOrder = S2Util.cast(order, "");
 
-            if (vOrder != null && !vOrder.isBlank() && !"ASC".equalsIgnoreCase(vOrder) && !"DESC".equalsIgnoreCase(vOrder)) {
+            if (vOrder != null && !vOrder.isBlank() && !"ASC".equalsIgnoreCase(vOrder)
+                    && !"DESC".equalsIgnoreCase(vOrder)) {
                 throw new S2RuntimeException("허용하지 않은 order값 입니다.");
             }
 
@@ -132,8 +134,7 @@ public class S2PaginationInfo<T> {
                         "<a href=\"#\" onclick=\"{0} return false;\" title=\"{1} 페이지 이동\">{1}</a>&#160;",
                         "<a href=\"#\" onclick=\"{0} return false;\" title=\"다음 페이지 이동\">[다음]</a>&#160;",
                         "<a href=\"#\" onclick=\"{0} return false;\" title=\"끝 페이지 이동\">[마지막]</a>&#160;"
-                }
-        );
+                });
     }
 
     protected final void setPageLabels(String... pageLabels) {

@@ -784,7 +784,8 @@ public class S2JsonUtil {
                 default:
                     // "-Infinity" 는 '-' 로 시작하므로 위 'N'/'I' 분기로 라우팅되지 않는다.
                     // ALLOW_NON_NUMERIC_NUMBERS 가 켜진 경우에는 여기서도 특수값으로 처리한다.
-                    if (c == '-' && Feature.isEnabled(flags, Feature.ALLOW_NON_NUMERIC_NUMBERS) && json.startsWith("-Infinity", pos)) {
+                    if (c == '-' && Feature.isEnabled(flags, Feature.ALLOW_NON_NUMERIC_NUMBERS)
+                            && json.startsWith("-Infinity", pos)) {
                         return parseSpecialNumber();
                     }
                     return parseNumber();

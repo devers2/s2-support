@@ -70,12 +70,13 @@ public class S2ImageUtil {
      * newFilePath/newFileName 이 없으면 원본 경로/파일명을 사용해 변경 후 전체 경로를 계산한다.
      * convertImage/imageResize 가 동일하게 사용하는 로직이다.
      */
-    private static String buildAfterFileFullPath(Path beforeFilePath, String beforeFileNameString, String newFilePath, String newFileName) {
+    private static String buildAfterFileFullPath(Path beforeFilePath, String beforeFileNameString, String newFilePath,
+            String newFileName) {
         return S2StringUtil.replaceChars(
-                (newFilePath != null && !newFilePath.isBlank() ? newFilePath : beforeFilePath.toString()) + "/" + (newFileName != null && !newFileName.isBlank() ? newFileName : beforeFileNameString),
+                (newFilePath != null && !newFilePath.isBlank() ? newFilePath : beforeFilePath.toString()) + "/"
+                        + (newFileName != null && !newFileName.isBlank() ? newFileName : beforeFileNameString),
                 "/",
-                '\\'
-        );
+                '\\');
     }
 
     /**
@@ -94,7 +95,9 @@ public class S2ImageUtil {
      * @param isSourceFileDelete   기존 파일 삭제 여부
      * @return 결과 정보
      */
-    public static S2File convertImage(Path sourceFile, Integer maxWidth, Integer maxHeight, boolean isFixedRate, Long maxSize, String maxSizeOverExtension, String newFileExtension, String newFilePath, String newFileName, boolean isSourceFileDelete) {
+    public static S2File convertImage(Path sourceFile, Integer maxWidth, Integer maxHeight, boolean isFixedRate,
+            Long maxSize, String maxSizeOverExtension, String newFileExtension, String newFilePath, String newFileName,
+            boolean isSourceFileDelete) {
         Path resultPath = null;
         String resultExtension = "";
 
@@ -103,7 +106,8 @@ public class S2ImageUtil {
             var beforeFileFullPath = before.fullPath();
             var beforeFileExtension = before.extension();
 
-            var afterFileFullPath = buildAfterFileFullPath(before.parent(), before.fileNameString(), newFilePath, newFileName);
+            var afterFileFullPath = buildAfterFileFullPath(before.parent(), before.fileNameString(), newFilePath,
+                    newFileName);
             resultPath = Paths.get(afterFileFullPath);
 
             try (var newFileInputStream = Files.newInputStream(sourceFile);
@@ -118,7 +122,8 @@ public class S2ImageUtil {
 
                 if (newFileExtension != null && !newFileExtension.isBlank()) {
                     afterFileExtension = newFileExtension;
-                } else if (maxSize != null && maxSize < resizedFileSize && maxSizeOverExtension != null && !maxSizeOverExtension.isBlank()) {
+                } else if (maxSize != null && maxSize < resizedFileSize && maxSizeOverExtension != null
+                        && !maxSizeOverExtension.isBlank()) {
                     afterFileExtension = maxSizeOverExtension;
                 }
 
@@ -127,7 +132,8 @@ public class S2ImageUtil {
                     Files.createDirectories(newFileDirectory);
                 }
 
-                if (afterFileExtension == null || afterFileExtension.isBlank() || beforeFileExtension.equals(afterFileExtension)) {
+                if (afterFileExtension == null || afterFileExtension.isBlank()
+                        || beforeFileExtension.equals(afterFileExtension)) {
                     if (!beforeFileFullPath.equalsIgnoreCase(afterFileFullPath) && isSourceFileDelete) {
                         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                             S2FileUtil.delete(sourceFile);
@@ -137,7 +143,8 @@ public class S2ImageUtil {
                 } else {
                     int afterFileExtPoint = afterFileFullPath.lastIndexOf(".");
                     if (afterFileExtPoint != -1) {
-                        afterFileFullPath = afterFileFullPath.substring(0, afterFileExtPoint) + "." + afterFileExtension;
+                        afterFileFullPath = afterFileFullPath.substring(0, afterFileExtPoint) + "."
+                                + afterFileExtension;
                         resultPath = Paths.get(afterFileFullPath);
                     }
 
@@ -146,7 +153,8 @@ public class S2ImageUtil {
                         if (beforeImage == null) {
                             throw new IOException("이미지를 읽을 수 없습니다 (지원하지 않는 형식이거나 손상된 파일)");
                         }
-                        var afterImage = new BufferedImage(beforeImage.getWidth(), beforeImage.getHeight(), BufferedImage.TYPE_INT_RGB);
+                        var afterImage = new BufferedImage(beforeImage.getWidth(), beforeImage.getHeight(),
+                                BufferedImage.TYPE_INT_RGB);
 
                         afterImage.createGraphics().drawImage(beforeImage, 0, 0, Color.white, null);
                         ImageIO.write(afterImage, afterFileExtension, resultPath.toFile());
@@ -180,7 +188,8 @@ public class S2ImageUtil {
      * @param isSourceFileDelete 기존 파일 삭제 여부
      * @return 결과 정보
      */
-    public static S2File imageResize(Path sourceFile, Integer maxWidth, Integer maxHeight, boolean isFixedRate, String newFilePath, String newFileName, boolean isSourceFileDelete) {
+    public static S2File imageResize(Path sourceFile, Integer maxWidth, Integer maxHeight, boolean isFixedRate,
+            String newFilePath, String newFileName, boolean isSourceFileDelete) {
         Path resultFile = null;
         String resultExtension = "";
         String resultOriginalName = "";
@@ -191,7 +200,8 @@ public class S2ImageUtil {
             var beforeFileNameString = before.fileNameString();
             var beforeFileExtension = before.extension();
 
-            var afterFileFullPath = buildAfterFileFullPath(before.parent(), before.fileNameString(), newFilePath, newFileName);
+            var afterFileFullPath = buildAfterFileFullPath(before.parent(), before.fileNameString(), newFilePath,
+                    newFileName);
             resultFile = Paths.get(afterFileFullPath);
 
             try (var newFileInputStream = Files.newInputStream(sourceFile)) {
@@ -227,7 +237,8 @@ public class S2ImageUtil {
      * @param isFixedRate      가로세로 비율고정 여부(true: 비율 유지, flase: 비율 무시)
      * @return 변경된 이미지
      */
-    public static BufferedImage imageResize(InputStream imageInputStream, Integer maxWidth, Integer maxHeight, boolean isFixedRate) {
+    public static BufferedImage imageResize(InputStream imageInputStream, Integer maxWidth, Integer maxHeight,
+            boolean isFixedRate) {
         BufferedImage outputImage;
 
         try {
@@ -296,7 +307,8 @@ public class S2ImageUtil {
      * @param isSourceFileDelete 기존 파일 삭제 여부
      * @return 결과 정보
      */
-    public static S2File convertImageExtension(Path sourceFile, String newFileExtension, String newFilePath, String newFileName, boolean isSourceFileDelete) {
+    public static S2File convertImageExtension(Path sourceFile, String newFileExtension, String newFilePath,
+            String newFileName, boolean isSourceFileDelete) {
         Path resultFile = null;
         String resultExtension = "";
 
@@ -305,20 +317,29 @@ public class S2ImageUtil {
             var beforeFileFullPath = before.fullPath();
             var beforeFileExtension = before.extension();
 
-            var afterFileExtension = newFileExtension != null && !newFileExtension.isBlank() ? newFileExtension.toLowerCase() : "";
+            var afterFileExtension = newFileExtension != null && !newFileExtension.isBlank()
+                    ? newFileExtension.toLowerCase()
+                    : "";
             var afterFileName = "";
 
             if (newFileName != null && !newFileName.isBlank()) {
                 afterFileName = newFileName;
             } else {
-                afterFileName = (beforeFileExtension != null && !beforeFileExtension.isBlank() ? S2FileUtil.getBaseName(sourceFile) : sourceFile.getFileName().toString()) + (afterFileExtension != null && !afterFileExtension.isBlank() ? "." + afterFileExtension : "");
+                afterFileName = (beforeFileExtension != null && !beforeFileExtension.isBlank()
+                        ? S2FileUtil.getBaseName(sourceFile)
+                        : sourceFile.getFileName().toString())
+                        + (afterFileExtension != null && !afterFileExtension.isBlank() ? "." + afterFileExtension : "");
             }
 
-            var afterFileFullPath = S2StringUtil.replaceChars((newFilePath != null && !newFilePath.isBlank() ? newFilePath : before.parent().toString()) + "/" + afterFileName, "/", '\\');
+            var afterFileFullPath = S2StringUtil.replaceChars(
+                    (newFilePath != null && !newFilePath.isBlank() ? newFilePath : before.parent().toString()) + "/"
+                            + afterFileName,
+                    "/", '\\');
 
             resultFile = Paths.get(afterFileFullPath);
 
-            if (afterFileExtension == null || afterFileExtension.isBlank() || afterFileExtension.equals(beforeFileExtension)) {
+            if (afterFileExtension == null || afterFileExtension.isBlank()
+                    || afterFileExtension.equals(beforeFileExtension)) {
                 if (beforeFileFullPath.equalsIgnoreCase(afterFileFullPath)) {
                     resultFile = sourceFile;
                 } else {
@@ -341,7 +362,8 @@ public class S2ImageUtil {
                     if (beforeImage == null) {
                         throw new IOException("이미지를 읽을 수 없습니다 (지원하지 않는 형식이거나 손상된 파일): " + sourceFile);
                     }
-                    var afterImage = new BufferedImage(beforeImage.getWidth(), beforeImage.getHeight(), BufferedImage.TYPE_INT_RGB);
+                    var afterImage = new BufferedImage(beforeImage.getWidth(), beforeImage.getHeight(),
+                            BufferedImage.TYPE_INT_RGB);
 
                     afterImage.createGraphics().drawImage(beforeImage, 0, 0, Color.white, null);
                     ImageIO.write(afterImage, afterFileExtension, resultFile.toFile());
@@ -361,8 +383,7 @@ public class S2ImageUtil {
 
         return new S2File(
                 resultFile, resultExtension,
-                sourceFile != null ? sourceFile.getFileName().toString() : null
-        );
+                sourceFile != null ? sourceFile.getFileName().toString() : null);
     }
 
     /**

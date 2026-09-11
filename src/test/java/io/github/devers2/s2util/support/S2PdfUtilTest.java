@@ -11,7 +11,6 @@ import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
@@ -26,6 +25,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import javax.imageio.ImageIO;
 
 import com.sun.net.httpserver.HttpServer;
+
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.junit.jupiter.api.AfterAll;
@@ -273,8 +273,7 @@ class S2PdfUtilTest {
 
         try (InputStream mergedStream = S2PdfUtil.mergePdfs(
                 new ByteArrayInputStream(pdf1),
-                new ByteArrayInputStream(pdf2)
-        )) {
+                new ByteArrayInputStream(pdf2))) {
             assertNotNull(mergedStream);
             byte[] mergedBytes = mergedStream.readAllBytes();
 
@@ -299,8 +298,7 @@ class S2PdfUtilTest {
                 PdfSource.ofPdf(basePdf),
                 PdfSource.ofImage(imageBytes),
                 PdfSource.ofText(plainText),
-                PdfSource.ofSvg(svg)
-        );
+                PdfSource.ofSvg(svg));
 
         try (InputStream mergedStream = S2PdfUtil.merge(sources)) {
             assertNotNull(mergedStream);
@@ -322,10 +320,10 @@ class S2PdfUtilTest {
 
         List<InputStream> noteStreams = List.of(
                 new ByteArrayInputStream(note1),
-                new ByteArrayInputStream(note2)
-        );
+                new ByteArrayInputStream(note2));
 
-        try (InputStream mergedStream = S2PdfUtil.mergeHtmlAndPdfs(coverHtml, noteStreams, null, S2PdfUtil.class, true)) {
+        try (InputStream mergedStream = S2PdfUtil.mergeHtmlAndPdfs(coverHtml, noteStreams, null, S2PdfUtil.class,
+                true)) {
             assertNotNull(mergedStream);
             byte[] mergedBytes = mergedStream.readAllBytes();
 
@@ -344,8 +342,7 @@ class S2PdfUtilTest {
 
         var sources = List.of(
                 PdfSource.ofHtml(coverHtml),
-                PdfSource.ofPdf(bodyPdf)
-        );
+                PdfSource.ofPdf(bodyPdf));
 
         try (InputStream pagedStream = S2PdfUtil.mergeAndAddPageNumbers(sources, 2, 11, null)) {
             assertNotNull(pagedStream);
@@ -362,17 +359,19 @@ class S2PdfUtilTest {
     @DisplayName("S2ResourceInputStream 스트림 close 시 임시 파일 자동 삭제(누수 차단) 검증")
     void testZeroLeakResourceCleanup() throws IOException {
         Path tempFileRef;
+        S2ResourceInputStream resourceStream = null;
         try (InputStream mergedStream = S2PdfUtil.merge(
                 PdfSource.ofHtml("<h2>임시 파일 삭제 검증</h2>"),
-                PdfSource.ofText("본문 내용")
-        )) {
+                PdfSource.ofText("본문 내용"))) {
             assertTrue(mergedStream instanceof S2ResourceInputStream, "반환된 스트림은 S2ResourceInputStream 이어야 합니다.");
-            var resourceStream = (S2ResourceInputStream) mergedStream;
+            resourceStream = (S2ResourceInputStream) mergedStream;
             assertFalse(resourceStream.getTempFiles().isEmpty(), "임시 파일 목록이 비어있지 않아야 합니다.");
             tempFileRef = resourceStream.getTempFiles().get(0);
 
             assertNotNull(tempFileRef);
             assertTrue(Files.exists(tempFileRef), "스트림이 열려 있는 동안 임시 파일은 디스크에 존재해야 합니다.");
+        } finally {
+            S2StreamUtil.closeStream(resourceStream);
         }
 
         // 스트림 닫힘 후 디스크에서 완전히 삭제되었는지 검증
@@ -396,8 +395,7 @@ class S2PdfUtilTest {
         var sources = List.of(
                 PdfSource.ofHtmlUrl(baseUrl + "/cover"),
                 PdfSource.ofImageUrl(baseUrl + "/image.png"),
-                PdfSource.ofPdfUrl(baseUrl + "/sample.pdf")
-        );
+                PdfSource.ofPdfUrl(baseUrl + "/sample.pdf"));
 
         try (InputStream mergedStream = S2PdfUtil.merge(sources)) {
             assertNotNull(mergedStream);
@@ -417,8 +415,7 @@ class S2PdfUtilTest {
         var htmlUrls = List.of(baseUrl + "/cover");
         var noteStreams = List.of(
                 (InputStream) new ByteArrayInputStream(createSamplePdf("<h2>노트 본문 1</h2>")),
-                (InputStream) new ByteArrayInputStream(createSamplePdf("<h2>노트 본문 2</h2>"))
-        );
+                (InputStream) new ByteArrayInputStream(createSamplePdf("<h2>노트 본문 2</h2>")));
 
         try (InputStream mergedStream = S2PdfUtil.mergeHtmlUrlsAndPdfs(htmlUrls, noteStreams, true)) {
             assertNotNull(mergedStream);
@@ -463,12 +460,12 @@ class S2PdfUtilTest {
                 S2PdfUtil.PdfSource.ofHtml("<h1>1. HTML 소스</h1>"),
                 S2PdfUtil.PdfSource.ofImage(sampleServerPng),
                 S2PdfUtil.PdfSource.ofText("3. 일반 텍스트 소스 내용"),
-                S2PdfUtil.PdfSource.ofSvg("<svg width='100' height='100'><circle cx='50' cy='50' r='40' fill='red'/></svg>"),
+                S2PdfUtil.PdfSource
+                        .ofSvg("<svg width='100' height='100'><circle cx='50' cy='50' r='40' fill='red'/></svg>"),
                 S2PdfUtil.PdfSource.ofPdf(sampleServerPdf),
-                S2PdfUtil.PdfSource.ofUrl(baseUrl + "/cover")
-        );
+                S2PdfUtil.PdfSource.ofUrl(baseUrl + "/cover"));
 
-        S2ResourceInputStream resourceStream;
+        S2ResourceInputStream resourceStream = null;
         Path tempFilePath;
 
         try (InputStream is = S2PdfUtil.merge(sources)) {
@@ -481,6 +478,8 @@ class S2PdfUtilTest {
             try (PDDocument doc = Loader.loadPDF(mergedBytes)) {
                 assertEquals(6, doc.getNumberOfPages(), "6가지 타입의 문서가 각 1장씩 순서대로 총 6페이지로 병합되어야 합니다.");
             }
+        } finally {
+            S2StreamUtil.closeStream(resourceStream);
         }
 
         // close() 호출 후 임시 파일이 자동으로 삭제되었는지 검증 (메모리/디스크 누수 방지)
@@ -495,8 +494,7 @@ class S2PdfUtilTest {
                 baseUrl + "/cover",
                 baseUrl + "/euckr-page",
                 baseUrl + "/sample.pdf",
-                baseUrl + "/image.png"
-        );
+                baseUrl + "/image.png");
 
         try (InputStream mergedStream = S2PdfUtil.mergeUrls(urlList)) {
             assertNotNull(mergedStream);

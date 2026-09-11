@@ -20,6 +20,7 @@
 
 ## ✨ Key Utilities
 
+- **📑 PDF Engine & Multi-Format Merge** — High-fidelity HTML/image/text/SVG to PDF conversion, sequence-guaranteed multi-format merging, async distributed URL pre-fetch, zero-leak disk stream caching, and batch page numbering via `S2PdfUtil`
 - **📁 File Management** — Local and remote (SFTP/JSch) file operations via `FileManager`, `S2File`, `S2RemoteFile`
 - **📄 Pagination** — Ready-to-use `S2PaginationInfo`, `S2PaginationTag`, and `S2SearchVO` for list/search UIs
 - **🍃 Spring Utilities** — `S2ContextUtil`, `S2AutoConfiguration`, `S2AnnotationResolver`, `S2RestApiUtil` for Spring-based apps
@@ -38,7 +39,7 @@ Add the following dependency to your `build.gradle` or `pom.xml`.
 
 ```groovy
 dependencies {
-    implementation 'io.github.devers2.internal:s2-support:1.1.3'
+    implementation 'io.github.devers2.internal:s2-support:1.1.5'
 }
 ```
 
@@ -48,7 +49,7 @@ dependencies {
 <dependency>
     <groupId>io.github.devers2.internal</groupId>
     <artifactId>s2-support</artifactId>
-    <version>1.1.3</version>
+    <version>1.1.5</version>
 </dependency>
 ```
 
@@ -61,10 +62,10 @@ Depending on your application's requirements, you can optionally include compani
 
 | Module | Type & Coordinates | Key Features & Purpose |
 | :--- | :--- | :--- |
-| **`s2-validator`** | Library<br>`io.github.devers2:s2-validator:1.1.7` | **Cross-Platform Dynamic Validator**<br>• Author validation rules once in Java and synchronize seamlessly with client-side JavaScript (`s2.validator.js`).<br>• 30+ built-in rules (email, phone, date, etc.) with smart Korean particle interpolation (`{0|은/는}`).<br>• Fluent chaining API, conditional validation (`when`/`and`), nested/collection object validation.<br>• Seamless Spring MVC integration via `S2BindValidator` (`BindingResult`). |
+| **`s2-validator`** | Library<br>`io.github.devers2:s2-validator:1.1.8` | **Cross-Platform Dynamic Validator**<br>• Author validation rules once in Java and synchronize seamlessly with client-side JavaScript (`s2.validator.js`).<br>• 30+ built-in rules (email, phone, date, etc.) with smart Korean particle interpolation (`{0|은/는}`).<br>• Fluent chaining API, conditional validation (`when`/`and`), nested/collection object validation.<br>• Seamless Spring MVC integration via `S2BindValidator` (`BindingResult`). |
 | **`s2-validator-plugin`** | Gradle Plugin<br>`id 'io.github.devers2.validator' version '1.1.2'` | **Compile-Time Field Validation** *(Optional companion for `s2-validator`)*<br>• AST-based static analysis during build (`compileJava`).<br>• Inspects `.field("fieldName")` in `S2Validator.<DTO>builder()` to verify fields exist on the target DTO class, preventing field mismatches or refactoring regressions before runtime.<br>• Zero configuration required (Gradle only). |
-| **`s2-jpa`** | Library<br>`io.github.devers2:s2-jpa:1.1.7` | **Dynamic JPQL Query Builder**<br>• Template-based dynamic query construction using `S2Jpql` with `{{=key}}` placeholders.<br>• Fluent conditional parameter and clause binding (`bindClause`, `bindParameter`, `bindOrderBy`).<br>• Safe LIKE search with `LikeMode` (ANYWHERE, START, END) preventing injection. |
-| **`s2-util`** *(Bundle)* | Library<br>`io.github.devers2:s2-util:1.1.7` | **All-in-One Suite**<br>• Full bundle containing `s2-core`, `s2-validator`, and `s2-jpa` libraries together.<br>• *(⚠️ Note: Even with the full bundle, the compile-time validation Gradle plugin must still be added to the `plugins {}` block separately)* |
+| **`s2-jpa`** | Library<br>`io.github.devers2:s2-jpa:1.1.8` | **Dynamic JPQL Query Builder**<br>• Template-based dynamic query construction using `S2Jpql` with `{{=key}}` placeholders.<br>• Fluent conditional parameter and clause binding (`bindClause`, `bindParameter`, `bindOrderBy`).<br>• Safe LIKE search with `LikeMode` (ANYWHERE, START, END) preventing injection. |
+| **`s2-util`** *(Bundle)* | Library<br>`io.github.devers2:s2-util:1.1.8` | **All-in-One Suite**<br>• Full bundle containing `s2-core`, `s2-validator`, and `s2-jpa` libraries together.<br>• *(⚠️ Note: Even with the full bundle, the compile-time validation Gradle plugin must still be added to the `plugins {}` block separately)* |
 
 **Example Dependency Setup (Gradle):**
 
@@ -78,17 +79,17 @@ plugins {
 
 dependencies {
     // Base: s2-support (s2-core is included automatically)
-    implementation 'io.github.devers2.internal:s2-support:1.1.3'
+    implementation 'io.github.devers2.internal:s2-support:1.1.5'
 
     // [Optional] Server & Client Unified Validation
-    implementation 'io.github.devers2:s2-validator:1.1.7'
+    implementation 'io.github.devers2:s2-validator:1.1.8'
 
     // [Optional] Dynamic JPQL Queries
-    implementation 'io.github.devers2:s2-jpa:1.1.7'
+    implementation 'io.github.devers2:s2-jpa:1.1.8'
 
     // Or simply use the full bundle instead of individual modules:
     // (⚠️ Note: The Gradle plugin above must still be added to plugins {} separately)
-    // implementation 'io.github.devers2:s2-util:1.1.7'
+    // implementation 'io.github.devers2:s2-util:1.1.8'
 }
 ```
 
@@ -99,21 +100,21 @@ dependencies {
 <dependency>
     <groupId>io.github.devers2.internal</groupId>
     <artifactId>s2-support</artifactId>
-    <version>1.1.3</version>
+    <version>1.1.5</version>
 </dependency>
 
 <!-- [Optional] s2-validator -->
 <dependency>
     <groupId>io.github.devers2</groupId>
     <artifactId>s2-validator</artifactId>
-    <version>1.1.7</version>
+    <version>1.1.8</version>
 </dependency>
 
 <!-- [Optional] s2-jpa -->
 <dependency>
     <groupId>io.github.devers2</groupId>
     <artifactId>s2-jpa</artifactId>
-    <version>1.1.7</version>
+    <version>1.1.8</version>
 </dependency>
 ```
 
@@ -165,7 +166,7 @@ This library is provided under the **Apache License 2.0**. You are free to use, 
 
 ---
 
-s2-support Version: 1.1.3 (2026-09-09)
+s2-support Version: 1.1.5 (2026-09-11)
 
 [//]: # 'S2_DEPS_INFO_START'
 

@@ -37,4 +37,17 @@ For more details, please refer to the 'LICENSE' file in the root directory.
    - License: EPL 2.0
    - URL: [https://www.eclipse.org/aspectj/](https://www.eclipse.org/aspectj/)
 
+9. OpenHTMLtoPDF (openhtmltopdf-pdfbox, openhtmltopdf-core)
+   - License: GNU Lesser General Public License, Version 2.1 (LGPL 2.1) / Mozilla Public License 2.0 (MPL 2.0)
+   - URL: [https://github.com/danfickle/openhtmltopdf](https://github.com/danfickle/openhtmltopdf)
+
+10. Apache PDFBox (pdfbox, fontbox, pdfbox-io, xmpbox)
+    - License: Apache License 2.0
+    - URL: [https://pdfbox.apache.org/](https://pdfbox.apache.org/)
+
+11. Jsoup Java HTML Parser
+    - License: MIT License
+    - URL: [https://jsoup.org/](https://jsoup.org/)
+
 ---
+

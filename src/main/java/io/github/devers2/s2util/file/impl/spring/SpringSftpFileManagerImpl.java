@@ -119,7 +119,8 @@ public class SpringSftpFileManagerImpl implements FileManager {
             }
         }
 
-        throw new S2RuntimeException("SFTP 세션 획득 실패: " + (lastException != null ? lastException.getMessage() : "최대 재시도 횟수 초과"));
+        throw new S2RuntimeException(
+                "SFTP 세션 획득 실패: " + (lastException != null ? lastException.getMessage() : "최대 재시도 횟수 초과"));
     }
 
     /**

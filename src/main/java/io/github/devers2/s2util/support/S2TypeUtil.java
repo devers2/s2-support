@@ -92,12 +92,14 @@ public class S2TypeUtil {
     /**
      * 인터페이스 정보를 담는 내부 레코드
      */
-    private record InterfaceInfo(List<String> names, Class<?>[] types) {}
+    private record InterfaceInfo(List<String> names, Class<?>[] types) {
+    }
 
     /**
      * 타입 정보를 담는 내부 레코드
      */
-    private record TypePair(Type cand, Type bs) {}
+    private record TypePair(Type cand, Type bs) {
+    }
 
     private S2TypeUtil() {
         // Prevent instantiation
@@ -123,8 +125,7 @@ public class S2TypeUtil {
             // DevTools 환경에서 ClassLoader 불일치 문제를 해결하기 위해 현재 컨텍스트의 ClassLoader로 클래스를 다시 로드한다.
             @SuppressWarnings("unchecked")
             Class<? extends T> typeClass = (Class<? extends T>) Class.forName(
-                    resolvedClass.getName(), true, Thread.currentThread().getContextClassLoader()
-            );
+                    resolvedClass.getName(), true, Thread.currentThread().getContextClassLoader());
 
             Constructor<? extends T> constructor;
             if (args == null || args.length == 0) {
@@ -143,9 +144,8 @@ public class S2TypeUtil {
             throw new RuntimeException(
                     String.format(
                             "리플렉션을 통한 인스턴스 생성에 실패했습니다: %s (args: %s)",
-                            resolvedClass.getName(), Arrays.toString(args != null ? args : new Object[] { "null" })
-                    ), e
-            );
+                            resolvedClass.getName(), Arrays.toString(args != null ? args : new Object[] { "null" })),
+                    e);
         }
     }
 
@@ -190,9 +190,7 @@ public class S2TypeUtil {
         throw new TypeMismatchException(
                 String.format(
                         "타입 불일치: %s를 %s로 캐스팅할 수 없습니다.",
-                        obj.getClass().getName(), typeClass.getName()
-                )
-        );
+                        obj.getClass().getName(), typeClass.getName()));
     }
 
     /**
@@ -266,8 +264,7 @@ public class S2TypeUtil {
                 Boolean.class,
                 2000,
                 7200_000L,
-                k -> Optional.of(calculateHierarchy(candidate, k.baseName()))
-        ).orElse(false);
+                k -> Optional.of(calculateHierarchy(candidate, k.baseName()))).orElse(false);
     }
 
     /**
@@ -430,8 +427,7 @@ public class S2TypeUtil {
                     Class<?>[] ifaces = k.getInterfaces();
                     List<String> names = Arrays.stream(ifaces).map(S2TypeUtil::getNormalizedName).toList();
                     return Optional.of(new InterfaceInfo(names, ifaces));
-                }
-        ).orElseGet(() -> new InterfaceInfo(List.of(), new Class<?>[0]));
+                }).orElseGet(() -> new InterfaceInfo(List.of(), new Class<?>[0]));
     }
 
     /**
@@ -520,7 +516,8 @@ public class S2TypeUtil {
                     return comp.compareTo(v2);
                 } catch (ClassCastException | NullPointerException e) {
                     if (logger.isDebugEnabled()) {
-                        logger.debug("값 비교 중 예외 발생: v1={} ({}), v2={} ({}) - 0 반환", v1, c1.getName(), v2, c2.getName(), e);
+                        logger.debug("값 비교 중 예외 발생: v1={} ({}), v2={} ({}) - 0 반환", v1, c1.getName(), v2, c2.getName(),
+                                e);
                     }
                 }
             }
@@ -531,7 +528,8 @@ public class S2TypeUtil {
                     return -comp.compareTo(v1); // 부호 반전으로 v1 기준 반환
                 } catch (ClassCastException | NullPointerException e) {
                     if (logger.isDebugEnabled()) {
-                        logger.debug("대칭 비교 중 예외 발생: v1={} ({}), v2={} ({}) - 0 반환", v1, c1.getName(), v2, c2.getName(), e);
+                        logger.debug("대칭 비교 중 예외 발생: v1={} ({}), v2={} ({}) - 0 반환", v1, c1.getName(), v2, c2.getName(),
+                                e);
                     }
                 }
             }

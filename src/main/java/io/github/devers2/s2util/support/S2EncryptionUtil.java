@@ -77,7 +77,9 @@ public class S2EncryptionUtil {
      *          <dd>암호화에 실패하면 예외를 전파하여 호출한 측에서 처리하도록 한다.</dd>
      *          </dl>
      */
-    public static String encrypt(String plainText, String password) throws NoSuchAlgorithmException, InvalidKeySpecException, NoSuchPaddingException, InvalidAlgorithmParameterException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
+    public static String encrypt(String plainText, String password)
+            throws NoSuchAlgorithmException, InvalidKeySpecException, NoSuchPaddingException,
+            InvalidAlgorithmParameterException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
         var salt = generateSalt();
         var iv = generateIv();
         var key = generateKey(password, salt);
@@ -152,13 +154,13 @@ public class S2EncryptionUtil {
      * @throws NoSuchAlgorithmException 요청된 키 파생 알고리즘이 현재 환경에서 지원되지 않는 경우
      * @throws InvalidKeySpecException  제공된 키 스펙이 해당 키 파생 알고리즘에 유효하지 않은 경우
      */
-    private static SecretKey generateKey(String password, byte[] salt) throws NoSuchAlgorithmException, InvalidKeySpecException {
+    private static SecretKey generateKey(String password, byte[] salt)
+            throws NoSuchAlgorithmException, InvalidKeySpecException {
         var spec = new PBEKeySpec(
                 password.toCharArray(),
                 salt,
                 ITERATION_COUNT,
-                KEY_LENGTH
-        );
+                KEY_LENGTH);
         var factory = SecretKeyFactory.getInstance(KEY_DERIVATION_ALGORITHM);
         var key = factory.generateSecret(spec).getEncoded();
         return new SecretKeySpec(key, "AES");

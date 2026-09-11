@@ -23,11 +23,12 @@ package io.github.devers2.s2util.pagination;
 import java.io.IOException;
 import java.text.MessageFormat;
 
-import io.github.devers2.s2util.core.S2StringUtil;
-import io.github.devers2.s2util.core.S2Util;
 import jakarta.servlet.jsp.JspException;
 import jakarta.servlet.jsp.JspWriter;
 import jakarta.servlet.jsp.tagext.TagSupport;
+
+import io.github.devers2.s2util.core.S2StringUtil;
+import io.github.devers2.s2util.core.S2Util;
 
 /**
  * s2's utilities

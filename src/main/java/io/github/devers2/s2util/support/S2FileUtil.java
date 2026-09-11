@@ -305,7 +305,8 @@ public class S2FileUtil {
     public static boolean writeFile(String filePath, String content, boolean isAppend) throws IOException {
         var openOptions = isAppend
                 ? new StandardOpenOption[] { StandardOpenOption.CREATE, StandardOpenOption.APPEND }
-                : new StandardOpenOption[] { StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE };
+                : new StandardOpenOption[] { StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING,
+                        StandardOpenOption.WRITE };
         Files.writeString(Paths.get(filePath), content, StandardCharsets.UTF_8, openOptions);
         return true;
     }
@@ -541,7 +542,8 @@ public class S2FileUtil {
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
                     var fileName = file.getFileName().toString();
                     // 접두사가 비어 있거나 파일 이름이 접두사로 시작하는 경우
-                    if (filePrefixToDelete == null || filePrefixToDelete.isBlank() || fileName.startsWith(filePrefixToDelete)) {
+                    if (filePrefixToDelete == null || filePrefixToDelete.isBlank()
+                            || fileName.startsWith(filePrefixToDelete)) {
                         var creationTime = attrs.creationTime();
                         var lastModifiedTime = attrs.lastModifiedTime();
                         // 수정 시간이 생성 시간보다 나중이면 사용
@@ -786,7 +788,8 @@ public class S2FileUtil {
         Path result = null;
         if (sourceStream != null)
             try {
-                Path tempFile = Files.createTempFile("s2_tmp_" + S2Uuid.generateUuidV7() + "_", "." + (fileExtension == null || fileExtension.isBlank() ? "tmp" : fileExtension));
+                Path tempFile = Files.createTempFile("s2_tmp_" + S2Uuid.generateUuidV7() + "_",
+                        "." + (fileExtension == null || fileExtension.isBlank() ? "tmp" : fileExtension));
                 if (closeableToFile(sourceStream, tempFile, shouldCloseStream) != -1) {
                     result = tempFile;
                 }
@@ -954,7 +957,8 @@ public class S2FileUtil {
      * @return processor 의 처리 결과
      * @throws IOException IO 예외 발생 시
      */
-    public static <T> T processStreamWithTempFile(InputStream sourceStream, String fileExtension, Function<Path, T> processor) throws IOException {
+    public static <T> T processStreamWithTempFile(InputStream sourceStream, String fileExtension,
+            Function<Path, T> processor) throws IOException {
         return processStreamWithTempFile(sourceStream, fileExtension, processor, false);
     }
 
@@ -968,7 +972,8 @@ public class S2FileUtil {
      * @return processor 의 처리 결과
      * @throws IOException IO 예외 발생 시
      */
-    public static <T> T processStreamWithTempFile(Reader sourceReader, String fileExtension, Function<Path, T> processor) throws IOException {
+    public static <T> T processStreamWithTempFile(Reader sourceReader, String fileExtension,
+            Function<Path, T> processor) throws IOException {
         return processStreamWithTempFile(sourceReader, fileExtension, processor, false);
     }
 
@@ -983,7 +988,8 @@ public class S2FileUtil {
      * @return processor 의 처리 결과
      * @throws IOException IO 예외 발생 시
      */
-    public static <T> T processStreamWithTempFile(InputStream sourceStream, String fileExtension, Function<Path, T> processor, boolean shouldCloseStream) throws IOException {
+    public static <T> T processStreamWithTempFile(InputStream sourceStream, String fileExtension,
+            Function<Path, T> processor, boolean shouldCloseStream) throws IOException {
         Path tempFile = null;
         try {
             tempFile = streamToTempFile(sourceStream, fileExtension, shouldCloseStream);
@@ -1008,7 +1014,8 @@ public class S2FileUtil {
      * @return processor 의 처리 결과
      * @throws IOException IO 예외 발생 시
      */
-    public static <T> T processStreamWithTempFile(Reader sourceReader, String fileExtension, Function<Path, T> processor, boolean shouldCloseStream) throws IOException {
+    public static <T> T processStreamWithTempFile(Reader sourceReader, String fileExtension,
+            Function<Path, T> processor, boolean shouldCloseStream) throws IOException {
         Path tempFile = null;
         try {
             tempFile = streamToTempFile(sourceReader, fileExtension, shouldCloseStream);
@@ -1174,8 +1181,7 @@ public class S2FileUtil {
             Map.entry("application/x-font-woff", "woff"),
             Map.entry("application/xhtml+xml", "xhtml"),
             Map.entry("application/vnd.ms-excel", "xls"),
-            Map.entry("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx")
-    );
+            Map.entry("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx"));
 
     public static String getExtensionByMimeType(Path sourceFile) {
         String extension = "";
@@ -1237,7 +1243,8 @@ public class S2FileUtil {
      * S2FileUtil.zipFiles(sourceFileList, response.getOutputStream());
      * }</pre>
      */
-    public static void zipFiles(List<Entry<String, InputStream>> sourceFileList, OutputStream outputStream) throws IOException {
+    public static void zipFiles(List<Entry<String, InputStream>> sourceFileList, OutputStream outputStream)
+            throws IOException {
         if (S2Util.isEmpty(sourceFileList) || outputStream == null) {
             throw new IllegalArgumentException("대상 파일 및 출력 스트림이 없습니다.");
         }

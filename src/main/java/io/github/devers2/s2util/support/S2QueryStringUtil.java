@@ -97,7 +97,8 @@ public class S2QueryStringUtil {
         if (entries != null) {
             for (Entry<String, String> entry : entries) {
                 if (entry != null && entry.getKey() != null && !entry.getKey().isBlank() && entry.getValue() != null) {
-                    queryParams.put(S2StringUtil.sanitizeInput(entry.getKey()), S2StringUtil.sanitizeInput(entry.getValue()));
+                    queryParams.put(S2StringUtil.sanitizeInput(entry.getKey()),
+                            S2StringUtil.sanitizeInput(entry.getValue()));
                 }
             }
         }
@@ -137,7 +138,9 @@ public class S2QueryStringUtil {
                 if (c == '&') {
                     if (keyBuilder.length() > 0) {
                         var key = S2StringUtil.sanitizeInput(keyBuilder.toString());
-                        var value = valueBuilder.length() > 0 ? URLDecoder.decode(valueBuilder.toString(), StandardCharsets.UTF_8.name()) : "";
+                        var value = valueBuilder.length() > 0
+                                ? URLDecoder.decode(valueBuilder.toString(), StandardCharsets.UTF_8.name())
+                                : "";
                         if (!key.isBlank()) {
                             queryParams.put(key, S2StringUtil.sanitizeInput(value));
                         }
@@ -157,7 +160,9 @@ public class S2QueryStringUtil {
             // 마지막 파라미터 처리
             if (keyBuilder.length() > 0) {
                 var key = S2StringUtil.sanitizeInput(keyBuilder.toString());
-                var value = valueBuilder.length() > 0 ? URLDecoder.decode(valueBuilder.toString(), StandardCharsets.UTF_8.name()) : "";
+                var value = valueBuilder.length() > 0
+                        ? URLDecoder.decode(valueBuilder.toString(), StandardCharsets.UTF_8.name())
+                        : "";
                 if (!key.isBlank()) {
                     queryParams.put(key, S2StringUtil.sanitizeInput(value));
                 }

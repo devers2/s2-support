@@ -132,8 +132,7 @@ public class S2LruMap<K, V> extends LinkedHashMap<K, V> {
      */
     public static <K, V> Map<K, V> createSynchronizedLRUMap(int maxCapacity) {
         return Collections.synchronizedMap(
-                new S2LruMap<>(maxCapacity / 2, 0.75f, true, maxCapacity)
-        );
+                new S2LruMap<>(maxCapacity / 2, 0.75f, true, maxCapacity));
     }
 
 }

@@ -133,8 +133,7 @@ public class SpringSftpConfig {
                     "sftp.known-hosts-path 가 설정되지 않았고 sftp.allow-unknown-hosts 도 false 입니다. "
                             + "이 상태에서는 모든 SFTP 연결의 호스트 키 검증이 거부되어 연결이 실패합니다. "
                             + "known-hosts 파일 경로를 설정하거나, 신뢰할 수 있는 내부망이라면 "
-                            + "sftp.allow-unknown-hosts=true 로 설정하세요."
-            );
+                            + "sftp.allow-unknown-hosts=true 로 설정하세요.");
         }
         factory.setAllowUnknownKeys(allowUnknownHosts);
 

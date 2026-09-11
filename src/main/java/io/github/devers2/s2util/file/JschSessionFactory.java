@@ -23,14 +23,14 @@ package io.github.devers2.s2util.file;
 import java.time.Duration;
 import java.util.NoSuchElementException;
 
+import com.jcraft.jsch.JSch;
+import com.jcraft.jsch.Session;
+
 import org.apache.commons.pool2.PooledObject;
 import org.apache.commons.pool2.PooledObjectFactory;
 import org.apache.commons.pool2.impl.AbandonedConfig;
 import org.apache.commons.pool2.impl.DefaultPooledObject;
 import org.apache.commons.pool2.impl.GenericObjectPool;
-
-import com.jcraft.jsch.JSch;
-import com.jcraft.jsch.Session;
 
 import io.github.devers2.s2util.log.S2LogManager;
 import io.github.devers2.s2util.log.S2Logger;
@@ -109,7 +109,8 @@ public class JschSessionFactory {
      * @param passphrase     sftp private key passphrase
      * @param password       sftp password
      */
-    public JschSessionFactory(String host, int port, String username, String privateKeyPath, String passphrase, String password) {
+    public JschSessionFactory(String host, int port, String username, String privateKeyPath, String passphrase,
+            String password) {
         this.host = host;
         this.port = port;
         this.username = username;
@@ -153,7 +154,8 @@ public class JschSessionFactory {
         this.sessionMinIdle = sessionMinIdle != null ? sessionMinIdle : DEFAULT_SESSION_MIN_IDLE;
         sessionPool = createSessionPool(this.sessionMaxTotal, this.sessionMinIdle);
 
-        this.sessionMaxWaitMillis = sessionMaxWaitMillis != null ? sessionMaxWaitMillis : DEFAULT_SESSION_MAX_WAIT_MILLIS;
+        this.sessionMaxWaitMillis = sessionMaxWaitMillis != null ? sessionMaxWaitMillis
+                : DEFAULT_SESSION_MAX_WAIT_MILLIS;
     }
 
     /**
@@ -277,7 +279,8 @@ public class JschSessionFactory {
                 // borrowObject() 타임아웃(NoSuchElementException) 또는 풀이 닫혀버린 경우처럼
                 // 풀이 실제로 "고장"난 신호일 때만 강제 초기화한다. forceResetPool() 내부의
                 // 디바운스(MIN_RESET_INTERVAL_MILLIS)가 짧은 시간 내 반복 초기화를 막아준다.
-                if (e instanceof NoSuchElementException || (e.getMessage() != null && e.getMessage().contains("Pool not open"))) {
+                if (e instanceof NoSuchElementException
+                        || (e.getMessage() != null && e.getMessage().contains("Pool not open"))) {
                     forceResetPool();
                 }
             }
@@ -288,7 +291,8 @@ public class JschSessionFactory {
             }
         }
 
-        throw new Exception("최대 재시도 횟수 초과 - 마지막 오류: " + (lastException != null ? lastException.getMessage() : "알 수 없는 오류"));
+        throw new Exception(
+                "최대 재시도 횟수 초과 - 마지막 오류: " + (lastException != null ? lastException.getMessage() : "알 수 없는 오류"));
     }
 
     private void invalidateSession(Session session) {
@@ -382,7 +386,8 @@ public class JschSessionFactory {
     }
 
     public String getPoolStatus() {
-        return String.format("Active: %d, Idle: %d, Max: %d", sessionPool.getNumActive(), sessionPool.getNumIdle(), sessionPool.getMaxTotal());
+        return String.format("Active: %d, Idle: %d, Max: %d", sessionPool.getNumActive(), sessionPool.getNumIdle(),
+                sessionPool.getMaxTotal());
     }
 
 }

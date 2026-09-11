@@ -105,7 +105,8 @@ public class S2HashUtil {
      *          <dd>암호화된 비밀번호와 입력된 비밀번호 비교, 높은 보안 요구사항이 있을때는 BCrypt 또는 Argon2 사용을 검토 해야함</dd>
      *          </dl>
      */
-    public static boolean verify(String text, String storedHash) throws NoSuchAlgorithmException, InvalidKeySpecException {
+    public static boolean verify(String text, String storedHash)
+            throws NoSuchAlgorithmException, InvalidKeySpecException {
         if (storedHash == null || storedHash.isBlank()) {
             return false;
         }
@@ -150,8 +151,7 @@ public class S2HashUtil {
                 text.toCharArray(),
                 salt,
                 ITERATION_COUNT,
-                KEY_LENGTH
-        );
+                KEY_LENGTH);
         var factory = SecretKeyFactory.getInstance(ALGORITHM);
         return factory.generateSecret(spec).getEncoded();
     }
@@ -473,9 +473,11 @@ public class S2HashUtil {
         }
     }
 
-    private static String generateHashFromStream(String algorithm, InputStream input, Integer bufferSize) throws IOException, NoSuchAlgorithmException {
+    private static String generateHashFromStream(String algorithm, InputStream input, Integer bufferSize)
+            throws IOException, NoSuchAlgorithmException {
         var md = MessageDigest.getInstance(algorithm);
-        var buffer = new byte[bufferSize != null && bufferSize > S2StreamUtil.getBufferSize() ? bufferSize : S2StreamUtil.getBufferSize()];
+        var buffer = new byte[bufferSize != null && bufferSize > S2StreamUtil.getBufferSize() ? bufferSize
+                : S2StreamUtil.getBufferSize()];
         int bytesRead;
 
         while ((bytesRead = input.read(buffer)) != -1) {
@@ -618,7 +620,8 @@ public class S2HashUtil {
      *          <dd>비암호화 해시 함수로 빠르고 효율적이며 보안성이 중요하지 않을때 사용</dd>
      *          </dl>
      */
-    private static String generateXXHash64FromStream(long seed, Integer bufferSize, boolean shouldCloseStream, InputStream... inputs) throws IOException {
+    private static String generateXXHash64FromStream(long seed, Integer bufferSize, boolean shouldCloseStream,
+            InputStream... inputs) throws IOException {
         if (S2Util.isEmpty(inputs)) {
             return "";
         }
@@ -636,7 +639,8 @@ public class S2HashUtil {
         }
 
         try (var hash64 = xxHashFactory.newStreamingHash64(seed)) {
-            var buffer = new byte[bufferSize != null && bufferSize > S2StreamUtil.getBufferSize() ? bufferSize : S2StreamUtil.getBufferSize()];
+            var buffer = new byte[bufferSize != null && bufferSize > S2StreamUtil.getBufferSize() ? bufferSize
+                    : S2StreamUtil.getBufferSize()];
 
             for (var input : inputs) {
                 if (input == null)

@@ -1,6 +1,6 @@
 [versions]
 # Plugin Versions
-s2-build-support = "0.2.1"
+s2-build-support = "0.2.2"
 shadow = "9.3.1"
 s2-validator-plugin = "1.1.2"
 
@@ -10,7 +10,7 @@ java = "21"
 jsr305 = "3.0.2"
 
 # S2Util Libraries
-s2-util = "1.1.7"
+s2-util = "1.1.8"
 
 # Dependencies
 aspectj = "1.9.25.1"
@@ -73,4 +73,3 @@ junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform
 s2-build-support = { id = "io.github.devers2.buildsupport", version.ref = "s2-build-support" }
 shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }
 s2-validator = { id = "io.github.devers2.validator", version.ref = "s2-validator-plugin" }
-

@@ -168,9 +168,11 @@ public final class S2AnnotationResolver {
                     }
                 }
             } catch (NoSuchMethodException e) {
-                throw new IllegalArgumentException(annotationClass.getSimpleName() + " annotation must have a 'value()' method.", e);
+                throw new IllegalArgumentException(
+                        annotationClass.getSimpleName() + " annotation must have a 'value()' method.", e);
             } catch (Exception e) {
-                throw new RuntimeException("Failed to scan and build map for base class: " + baseClass.getSimpleName() + " and annotation: " + annotationClass.getSimpleName(), e);
+                throw new RuntimeException("Failed to scan and build map for base class: " + baseClass.getSimpleName()
+                        + " and annotation: " + annotationClass.getSimpleName(), e);
             }
         }
 
@@ -252,7 +254,8 @@ public final class S2AnnotationResolver {
     private static String[] getFallbackPackages(@NonNull Class<?> baseClass) {
         Package pkg = baseClass.getPackage();
         if (pkg == null) {
-            throw new IllegalArgumentException("Base class '" + baseClass.getSimpleName() + "' has no package defined. Specify scan packages explicitly.");
+            throw new IllegalArgumentException("Base class '" + baseClass.getSimpleName()
+                    + "' has no package defined. Specify scan packages explicitly.");
         }
         return new String[] { pkg.getName() };
     }
@@ -449,7 +452,8 @@ public final class S2AnnotationResolver {
 
         String[] packagesToScan = validatePackages(scanPackages);
         if (packagesToScan.length == 0) {
-            throw new IllegalArgumentException("Scan packages must be explicitly set when resolving without a base class.");
+            throw new IllegalArgumentException(
+                    "Scan packages must be explicitly set when resolving without a base class.");
         }
 
         return resolveType(Object.class, annotationClass, annotationValue, false, packagesToScan);
@@ -626,7 +630,8 @@ public final class S2AnnotationResolver {
 
         String[] packagesToScan = validatePackages(scanPackages);
         if (packagesToScan.length == 0) {
-            throw new IllegalArgumentException("Scan packages must be explicitly set when resolving without a base class. This is to prevent full classpath scanning and ensure performance.");
+            throw new IllegalArgumentException(
+                    "Scan packages must be explicitly set when resolving without a base class. This is to prevent full classpath scanning and ensure performance.");
         }
 
         return resolveTypes(Object.class, annotationClass, annotationValue, packagesToScan);
@@ -647,22 +652,21 @@ public final class S2AnnotationResolver {
      * @return 형변환된 클래스 객체. 호환되지 않으면 {@code null}.
      */
     @SuppressWarnings("unchecked")
-    private static <T> Class<? extends T> castToSubclass(Class<?> candidate, Class<T> baseClass, boolean ignoreClassLoader) {
+    private static <T> Class<? extends T> castToSubclass(Class<?> candidate, Class<T> baseClass,
+            boolean ignoreClassLoader) {
         try {
             return (Class<? extends T>) candidate.asSubclass(baseClass);
         } catch (ClassCastException e) {
             if (ignoreClassLoader && S2TypeUtil.isAssignableFromByName(candidate, baseClass)) {
                 logger.debug(
                         "Class names are identical but ClassLoaders are different. candidate Ldr: {}, baseClass Ldr: {}",
-                        candidate.getClassLoader(), baseClass.getClassLoader()
-                );
+                        candidate.getClassLoader(), baseClass.getClassLoader());
                 return (Class<? extends T>) candidate;
             }
 
             logger.warn(
                     "Incompatible types. candidate '{}' is not a subclass of '{}'.",
-                    candidate.getName(), baseClass.getName()
-            );
+                    candidate.getName(), baseClass.getName());
         }
         return null;
     }
@@ -726,8 +730,7 @@ public final class S2AnnotationResolver {
                     }
                     Object value = AnnotationUtils.getValue(annotation);
                     return Optional.ofNullable(value == null ? null : String.valueOf(value));
-                }
-        ).orElse(null);
+                }).orElse(null);
     }
 
     /**
@@ -779,11 +782,11 @@ public final class S2AnnotationResolver {
                     try {
                         return Optional.of(returnType.cast(value));
                     } catch (ClassCastException e) {
-                        logger.warn("Value cast failed for type {} in annotation {} on class {}", returnType.getSimpleName(), annType.getSimpleName(), k.clazz.getName(), e);
+                        logger.warn("Value cast failed for type {} in annotation {} on class {}",
+                                returnType.getSimpleName(), annType.getSimpleName(), k.clazz.getName(), e);
                         return Optional.empty();
                     }
-                }
-        ).orElse(null);
+                }).orElse(null);
     }
 
 }

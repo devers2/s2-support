@@ -57,9 +57,17 @@ import io.github.devers2.buildsupport.S2BuildUtils
  * ❗중요: 동일한 소스를 다른 조직/목적으로 배포하는 경우 group을 다르게 설정해야 한다.
  *   예시) 원본: io.github.devers2, 포크: com.company
  *   이렇게 하면 의존성 관리 도구가 서로 다른 아티팩트로 인식하여 같은 리포지토리라도 별도 아티팩트로 취급된다.
+ *
+ * 💡 [문서 버전 자동 동기화 안내]
+ * Gradle 빌드 또는 태스크 실행 시, 아래 version에 지정된 값으로
+ * S2BuildUtils.updateReadmeWithVersionAndDependencies()에 설정된 대상 파일들
+ * (README.md, README.ko.md 등)의 의존성 코드 블록(Gradle/Maven) 및 인라인 버전이
+ * 현재 version 값으로 자동 동기화됩니다.
+ * 하단 버전 고지(Version: x.x.x)의 경우, 기존 문서의 버전과 다를 때(버전 변경 시)
+ * 새 버전 번호와 실행 당일의 릴리즈 날짜(YYYY-MM-DD)로 함께 자동 갱신됩니다.
  */
 group = "io.github.devers2.internal"
-version = "1.1.3"
+version = "1.1.5"
 
 // Shadow Plugin - Relocation 패키지 설정
 // ⚠️ 이 값을 설정해도 위 plugins{} 블록의 shadow alias가 함께 켜져 있지 않으면 아무 효과가 없다 (둘 다 켜야 함).

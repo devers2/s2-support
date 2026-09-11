@@ -86,7 +86,8 @@ public class S2ResourceInputStream extends InputStream { // AutoCloseable
         }
 
         synchronized List<Path> getTempFiles() {
-            return this.tempFileList != null ? Collections.unmodifiableList(new ArrayList<>(this.tempFileList)) : Collections.emptyList();
+            return this.tempFileList != null ? Collections.unmodifiableList(new ArrayList<>(this.tempFileList))
+                    : Collections.emptyList();
         }
 
         boolean isClosed() {

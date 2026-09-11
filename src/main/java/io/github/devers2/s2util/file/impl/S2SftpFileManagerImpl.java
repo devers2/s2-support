@@ -88,7 +88,8 @@ public class S2SftpFileManagerImpl implements FileManager {
      * @param passphrase     sftp private key passphrase
      * @param password       sftp password
      */
-    public S2SftpFileManagerImpl(String host, int port, String username, String privateKeyPath, String passphrase, String password) {
+    public S2SftpFileManagerImpl(String host, int port, String username, String privateKeyPath, String passphrase,
+            String password) {
         this(host, port, username, privateKeyPath, passphrase, password, null, null, null);
     }
 
@@ -121,7 +122,8 @@ public class S2SftpFileManagerImpl implements FileManager {
      *   new S2SftpFileManagerImpl(host, port, username, privateKeyPath, passphrase, password);
      * }</pre>
      */
-    public S2SftpFileManagerImpl(String host, int port, String username, String privateKeyPath, String passphrase, String password, Integer sessionMaxTotal, Integer sessionMinIdle, Integer sessionMaxWaitMillis) {
+    public S2SftpFileManagerImpl(String host, int port, String username, String privateKeyPath, String passphrase,
+            String password, Integer sessionMaxTotal, Integer sessionMinIdle, Integer sessionMaxWaitMillis) {
         // 디렉토리 캐시 TTL 우선순위: 시스템 프로퍼티 > 기본값
         long ttl = DEFAULT_DIR_CACHE_TTL_MS;
         try {
@@ -131,7 +133,8 @@ public class S2SftpFileManagerImpl implements FileManager {
             }
         } catch (Exception e) {
             if (logger.isWarnEnabled()) {
-                logger.warn("s2.sftp.dirCacheTtlMs system property parse failed, using default {}", DEFAULT_DIR_CACHE_TTL_MS);
+                logger.warn("s2.sftp.dirCacheTtlMs system property parse failed, using default {}",
+                        DEFAULT_DIR_CACHE_TTL_MS);
             }
         }
         this.dirCacheTtlMillis = Math.max(0L, ttl);
@@ -153,7 +156,8 @@ public class S2SftpFileManagerImpl implements FileManager {
             }
         }
 
-        jschSessionFactory = new JschSessionFactory(host, port, username, privateKeyPath, passphrase, password, sessionMaxTotal, sessionMinIdle, sessionMaxWaitMillis);
+        jschSessionFactory = new JschSessionFactory(host, port, username, privateKeyPath, passphrase, password,
+                sessionMaxTotal, sessionMinIdle, sessionMaxWaitMillis);
     }
 
     /**
@@ -212,7 +216,8 @@ public class S2SftpFileManagerImpl implements FileManager {
             // 스트림 직접 전송 및 크기 추적. 마지막 진행(count()) 이후 TRANSFER_IDLE_MILLIS 동안
             // 진행이 없으면(정말로 멈춘 전송) 감시 타이머가 채널을 강제로 끊는다. 느리더라도 계속
             // 진행 중인 정상 업로드는 count()가 계속 호출되어 끊기지 않는다.
-            var watchdog = startTransferIdleWatchdog(channel, monitor, TRANSFER_IDLE_MILLIS, TRANSFER_IDLE_CHECK_INTERVAL_MILLIS);
+            var watchdog = startTransferIdleWatchdog(channel, monitor, TRANSFER_IDLE_MILLIS,
+                    TRANSFER_IDLE_CHECK_INTERVAL_MILLIS);
             try {
                 channel.put(bufferedInput, remoteFileFullPath, monitor);
             } finally {
@@ -280,7 +285,8 @@ public class S2SftpFileManagerImpl implements FileManager {
             ChannelSftp finalChannel = channel;
             Session finalSession = session;
 
-            return new AutoClosingResourceInputStream(bufferedInputStream, rawInputStream, finalChannel, finalSession, TRANSFER_IDLE_MILLIS, TRANSFER_IDLE_CHECK_INTERVAL_MILLIS, jschSessionFactory);
+            return new AutoClosingResourceInputStream(bufferedInputStream, rawInputStream, finalChannel, finalSession,
+                    TRANSFER_IDLE_MILLIS, TRANSFER_IDLE_CHECK_INTERVAL_MILLIS, jschSessionFactory);
         } catch (Exception e) {
             // 예외 발생 시 리소스 정리
             if (channel != null && channel.isConnected()) {
@@ -403,7 +409,8 @@ public class S2SftpFileManagerImpl implements FileManager {
      * @param checkIntervalMillis idle 여부 점검 주기
      * @return 전송 완료 후 반드시 cancel() 해야 하는 Timer
      */
-    private static Timer startTransferIdleWatchdog(ChannelSftp channel, SizeTrackingMonitor monitor, long idleTimeoutMillis, long checkIntervalMillis) {
+    private static Timer startTransferIdleWatchdog(ChannelSftp channel, SizeTrackingMonitor monitor,
+            long idleTimeoutMillis, long checkIntervalMillis) {
         var timer = new Timer("s2-sftp-transfer-watchdog", true);
         var interval = Math.max(1L, checkIntervalMillis);
         timer.scheduleAtFixedRate(new TimerTask() {
@@ -435,10 +442,12 @@ public class S2SftpFileManagerImpl implements FileManager {
         private final JschSessionFactory sessionFactory;
         private final Timer timer;
         private final TimerTask task;
+        @SuppressWarnings("unused")
         private final long idleTimeoutMillis;
         private volatile long lastActivityAtMillis;
 
-        AutoClosingResourceInputStream(InputStream buffered, InputStream raw, ChannelSftp channel, Session session, long idleTimeoutMillis, long idleCheckIntervalMillis, JschSessionFactory sessionFactory) {
+        AutoClosingResourceInputStream(InputStream buffered, InputStream raw, ChannelSftp channel, Session session,
+                long idleTimeoutMillis, long idleCheckIntervalMillis, JschSessionFactory sessionFactory) {
             super(buffered, raw);
             this.channel = channel;
             this.session = session;

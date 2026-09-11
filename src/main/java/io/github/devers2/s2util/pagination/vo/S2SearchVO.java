@@ -269,7 +269,8 @@ public class S2SearchVO extends S2DefaultVO {
                 var column = orderByInfoArr[0].trim();
 
                 if (column != null && !column.isBlank()) {
-                    var sort = orderByInfoArr.length > 1 && "DESC".equalsIgnoreCase(orderByInfoArr[1].trim()) ? "DESC" : "ASC";
+                    var sort = orderByInfoArr.length > 1 && "DESC".equalsIgnoreCase(orderByInfoArr[1].trim()) ? "DESC"
+                            : "ASC";
                     Map<String, String> orderByMap = new HashMap<>(); // 명시적 타입 선언 유지 (제네릭 추론 활용)
                     orderByMap.put("column", column.toUpperCase());
                     orderByMap.put("sort", sort);
@@ -426,7 +427,8 @@ public class S2SearchVO extends S2DefaultVO {
      *                                        ZZZZZ: +09:00, Z
      */
     public void setSearchStartOffsetDateTime(String searchStartOffsetDateTimeString, String pattern) {
-        this.searchStartOffsetDateTime = S2DateUtil.parseToOffsetDateTime(searchStartOffsetDateTimeString, pattern, false);
+        this.searchStartOffsetDateTime = S2DateUtil.parseToOffsetDateTime(searchStartOffsetDateTimeString, pattern,
+                false);
     }
 
     public String getSearchEndLocalDateString() {

@@ -33,6 +33,9 @@ import java.util.Objects;
 import java.util.StringJoiner;
 import java.util.regex.Pattern;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+
 import io.github.devers2.s2util.core.S2Cache;
 import io.github.devers2.s2util.core.S2Cache.MethodHandleResolver;
 import io.github.devers2.s2util.core.S2Cache.MethodHandleResolver.LookupType;
@@ -40,8 +43,6 @@ import io.github.devers2.s2util.core.S2Cache.MethodHandleResolver.MethodKey;
 import io.github.devers2.s2util.core.S2Util;
 import io.github.devers2.s2util.log.S2LogManager;
 import io.github.devers2.s2util.log.S2Logger;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 
 /**
  * s2's utilities
@@ -115,7 +116,8 @@ public class S2ServletUtil {
         try {
             var referer = request.getHeader("REFERER");
             if (referer != null && !referer.isBlank()) {
-                prevServletPath = referer.replace(request.getRequestURL().toString().replace(request.getServletPath(), ""), "");
+                prevServletPath = referer
+                        .replace(request.getRequestURL().toString().replace(request.getServletPath(), ""), "");
             }
         } catch (Exception e) {
             logger.error("getPrevServletPath failed", e);
@@ -281,7 +283,8 @@ public class S2ServletUtil {
         if (contentDisposition != null && contentDisposition.contains("filename")) {
             // filename*=UTF-8''file.pdf(확장 인코딩), filename="file.pdf"(따옴표),
             // filename=file.pdf(따옴표 없음, 흔한 형식이나 기존엔 미지원) 세 가지 형식을 모두 처리
-            var pattern = Pattern.compile("filename\\*=UTF-8''([^;]*)|filename=\"([^\"]*)\"|filename=([^;]*)", Pattern.CASE_INSENSITIVE);
+            var pattern = Pattern.compile("filename\\*=UTF-8''([^;]*)|filename=\"([^\"]*)\"|filename=([^;]*)",
+                    Pattern.CASE_INSENSITIVE);
             var matcher = pattern.matcher(contentDisposition);
             if (matcher.find()) {
                 if (matcher.group(1) != null) {
@@ -354,7 +357,8 @@ public class S2ServletUtil {
     public static String getApplicationRootPath(HttpServletRequest request) {
         var rootPath = request.getSession().getServletContext().getRealPath("/");
         if (S2Util.isEmpty(rootPath)) {
-            rootPath = Objects.requireNonNull(request.getSession().getServletContext().getClassLoader().getResource("")).getPath();
+            rootPath = Objects.requireNonNull(request.getSession().getServletContext().getClassLoader().getResource(""))
+                    .getPath();
         }
         return rootPath;
     }
@@ -382,7 +386,8 @@ public class S2ServletUtil {
      * @param fieldNames 필드명(VO) 또는 Key(Map) 가변인자
      * @return 추출된 값들의 목록 (순서 보장 안 됨)
      */
-    private static <T> List<Object> getValueAll(List<Object> values, Object object, Class<T> voClass, Object... fieldNames) {
+    private static <T> List<Object> getValueAll(List<Object> values, Object object, Class<T> voClass,
+            Object... fieldNames) {
         if (object == null || fieldNames == null || fieldNames.length == 0) {
             return values;
         }
@@ -405,8 +410,7 @@ public class S2ServletUtil {
             // Resolver를 통해 사전 정의된 MAP_GET 핸들 획득
             var mapGetHandle = S2Cache.getMethodHandle(
                     MethodHandleResolver.MAP_GET_KEY,
-                    LookupType.METHOD
-            ).orElse(null);
+                    LookupType.METHOD).orElse(null);
 
             for (var entry : objMap.entrySet()) {
                 var key = entry.getKey();

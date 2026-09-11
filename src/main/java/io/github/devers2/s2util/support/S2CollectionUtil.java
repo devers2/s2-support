@@ -201,7 +201,8 @@ public class S2CollectionUtil {
             // 필드 값의 타입이 요소마다 뒤섞여 있어 위 comparator 가 total ordering 계약을
             // 위반한 경우(TimSort 의 "Comparison method violates its general contract!").
             // 항상 유효한 총순서를 보장하는 문자열 비교로 안전하게 다시 정렬한다.
-            Comparator<T> stringComparator = Comparator.comparing(item -> String.valueOf(S2Util.getValue(item, fieldName)));
+            Comparator<T> stringComparator = Comparator
+                    .comparing(item -> String.valueOf(S2Util.getValue(item, fieldName)));
             result.sort("DESC".equalsIgnoreCase(orderBy) ? stringComparator.reversed() : stringComparator);
         }
         return result;

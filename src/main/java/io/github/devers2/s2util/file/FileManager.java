@@ -99,15 +99,18 @@ public interface FileManager {
      * @param saveName    저장 명
      * @param fileManager 파일 관리 유틸리티
      */
-    public static S2RemoteFile downloadRemoteFile(String fileUrl, String savePath, String saveName, FileManager fileManager) {
+    public static S2RemoteFile downloadRemoteFile(String fileUrl, String savePath, String saveName,
+            FileManager fileManager) {
         S2RemoteFile remoteFileInfo = null;
 
-        if (fileUrl != null && !fileUrl.isBlank() && savePath != null && !savePath.isBlank() && saveName != null && !saveName.isBlank()) {
+        if (fileUrl != null && !fileUrl.isBlank() && savePath != null && !savePath.isBlank() && saveName != null
+                && !saveName.isBlank()) {
             try {
                 var url = new URI(fileUrl).toURL();
 
                 try (var inputStream = url.openStream()) {
-                    var writeFileSize = fileManager != null ? fileManager.writeFile(inputStream, savePath, saveName) : S2FileUtil.streamToFile(inputStream, Paths.get(savePath, saveName));
+                    var writeFileSize = fileManager != null ? fileManager.writeFile(inputStream, savePath, saveName)
+                            : S2FileUtil.streamToFile(inputStream, Paths.get(savePath, saveName));
                     if (writeFileSize != -1) {
                         // 원격 파일 정보
                         remoteFileInfo = new S2RemoteFile(url);

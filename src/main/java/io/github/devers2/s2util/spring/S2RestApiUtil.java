@@ -164,7 +164,8 @@ public class S2RestApiUtil {
         } else {
             // POST/GET 외 메서드는 지원하지 않는다. 조용히 null을 반환하면 "서버 응답이 없어서 null"인지
             // "애초에 지원 안 하는 메서드라 아무것도 안 보냈는지" 구분이 안 돼 디버깅이 어려워지므로 즉시 실패시킨다.
-            throw new IllegalArgumentException("Unsupported HTTP method: " + method + " (only POST and GET are supported)");
+            throw new IllegalArgumentException(
+                    "Unsupported HTTP method: " + method + " (only POST and GET are supported)");
         }
 
         if (responseEntity != null && responseEntity.getBody() != null) {
@@ -193,7 +194,8 @@ public class S2RestApiUtil {
      *          <dd>※ 즉 Content-Length 명시하지 않으면 InputStreamResource 를 2번 읽으면서 java.lang.IllegalStateException 예외가 발생한다.</dd>
      *          </dl>
      */
-    public static InputStreamResource createInputStreamResource(InputStream inputStream, String filename, long contentLength) {
+    public static InputStreamResource createInputStreamResource(InputStream inputStream, String filename,
+            long contentLength) {
         if (inputStream == null) {
             throw new IllegalArgumentException("InputStream must not be null");
         }
